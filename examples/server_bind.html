@@ -66,6 +66,9 @@
     <div>
       <button ng-click="testClick()">Test
     </div>
+    <div>
+      <button ng-click="testClick2()">Test
+    </div>
 
     
     <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/angularjs/1.3.9/angular.min.js"></script>
@@ -74,7 +77,7 @@
     <script type="text/javascript">
       angular.module('ServerRepeatExample', ['ServerRepeat']).
       controller('testController', function($scope,$rootScope) {
-
+      
       $scope.as = [{b:1},{b:2},{b:3}];
       
       $scope.testClick = function() {
@@ -88,10 +91,14 @@
         , summary : 'test'
         });
       }
-      
+        
+      $scope.testClick2 = function() {
+        $scope.posts[1].title = 'new thing';
+      }     
         //$scope.posts.pop(); // = [];
         //}
       });
+
     </script>
   </body>
 </html>

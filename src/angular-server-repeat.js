@@ -146,12 +146,19 @@ angular.module('ServerRepeat', ['ngAnimate']).directive('serverRepeat', function
 	    for (var j = 0; j < c[0].children.length; j++) {
               var gc = angular.element(c[0].children[j]);
 	      if (gc[0].attributes.hasOwnProperty('server-bind')) {
-		newObject[gc[0].attributes['server-bind'].value] = gc[0].innerText;
+		var key = gc[0].attributes['server-bind'].value;
+		var val = gc[0].innerText;
+		newObject[key] = val;
+		console.log(gc[0]);
+		angular.element(gc[0]).attr('ng-bind', (lhs + "." + key));
+		//newObject[gc[0].attributes['server-bind'].value] = gc[0].innerText;
 	      }
 	    }
 	    // hashKey
 	    var sScope = $scope.$new(true);
 	    sScope['index'] = i;
+	    sScope[lhs] = newObject;
+	    console.log(sScope);
 	    $compile($element.children()[i])(sScope);
 	    collection.push(newObject);
 	  }
@@ -226,7 +233,33 @@ angular.module('ServerRepeat', ['ngAnimate']).directive('serverRepeat', function
 	    // console.log(previousNode);
 	    console.log(collection);
 	    console.log(previousCollection);
+	    /*
+	    var existingElements = $element[0].parentElement.children;
 
+	    for (var i = 0; existingElements.length; i++) {
+	      console.log('see scope');
+	      //console.log(existingElements[i]);
+	    }
+	    */
+	    /*
+	    var existingElements = angular.element($element[0].parentElement.children);
+	    console.log(existingElements);
+	    console.log(existingElements.length);
+	    var deleteElements = [];
+	    var scopeIds = [];
+	    for (var i = 0; i < existingElements.length; i++) {
+	      var localScope = angular.element(existingElements[i].scope());
+	      scopeIds.push(localScope.index);
+	      if (i != localScope.index) {
+		//
+	      }
+	      //if (i != localScope.index) {
+		
+	      // } else {
+
+	      //	      }
+	    }
+	    */
 	    /* works
 	    if (collectionLength < previousCollectionLength) {
             $animate.leave($element[0].parentElement.children[0]);
@@ -234,7 +267,12 @@ angular.module('ServerRepeat', ['ngAnimate']).directive('serverRepeat', function
 	    */
 	    for (index = 0; index < collectionLength; index++) {
 	      console.log('scope');
+              // check for scope, it has the index
+	      // if scope is not
 
+	      // index matches id from scope, means item has not moved
+	      // index has no id in scope, means item has been deleted
+	      // id from scope does not have index, means it has been deleted
 	      
 	      if (index < previousCollectionLength &&
 		  angular.equals(collection[index],previousCollection[index])) {
