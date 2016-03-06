@@ -191,9 +191,13 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
     restrict: 'A',
     transclude: 'element',
     compile: function ngRepeatCompile($element, $attr) {
-      //var expression = $attr.serverRepeat;
+
+      // must be the direct child of server-repeat
+      if (!$element.parent().length > 0 && !$element.parent()[0].attributes.hasOwnProperty('server-repeat')) {
+	throw ngRepeatMinErr('iexp', '')
+      }
+      
       var expression = $element.parent()[0].attributes['server-repeat'].nodeValue;
-      console.log(expression);
       var ngRepeatEndComment = document.createComment(' end serverRepeatDynamic: ' + expression + ' ');
 
 
@@ -260,6 +264,13 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
         // hasOwnProperty.
         var lastBlockMap = createMap();
 
+	var remove = $scope.$watchCollection(rhs, function(serverSideCollection) {
+	  // don't let serverSideCollection be a reference to rhs
+	  var serverSideCollection = angular.copy(serverSideCollection);
+	  var serverSideCollectionLength = serverSideCollection.length;
+	  // track indexes in case something is deleted or moved
+	  
+	  
         //watch props
         $scope.$watchCollection(rhs, function ngRepeatAction(collection) {
           var index, length,
@@ -310,6 +321,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
               delete lastBlockMap[trackById];
               nextBlockMap[trackById] = block;
               nextBlockOrder[index] = block;
+	      
             } else if (nextBlockMap[trackById]) {
               // if collision detected. restore lastBlockMap and throw an error
               forEach(nextBlockOrder, function(block) {
@@ -363,7 +375,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
               }
               previousNode = getBlockEnd(block);
               updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
-            } else {
+            } else if (index > serverSideCollectionLength - 1) {
 	      // don't animate items that are entered via sever-repeat-item
               // new item which we don't know about
               $transclude(function ngRepeatTransclude(clone, scope) {
@@ -386,6 +398,8 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
           }
           lastBlockMap = nextBlockMap;
         });
+	  remove();
+	});
       };
     }
   };
