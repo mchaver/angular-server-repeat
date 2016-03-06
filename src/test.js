@@ -92,8 +92,78 @@ function hashKey(obj, nextUidFn) {
 
 
 angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($parse, $animate, $compile) {
+  return {
+    restrict : 'A',
+    compile: function serverRepeatCompile($element, $attr) {
+      var expression = $attr.serverRepeat;
+      var serverRepeatMinErr = minErr('serverRepeat');
+
+
+      var match = expression.match(/^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+track\s+by\s+([\s\S]+?))?\s*$/);
+
+      if (!match) {
+        throw serverRepeatMinErr('iexp', "Expected expression in form of '_item_ in _collection_[ track by _id_]' but got '{0}'.",
+            expression);
+      }
+
+      var lhs = match[1];
+      var rhs = match[2];
+      var aliasAs = match[3];
+      var trackByExp = match[4];
+
+      match = lhs.match(/^(?:(\s*[\$\w]+)|\(\s*([\$\w]+)\s*,\s*([\$\w]+)\s*\))$/);
+
+      if (!match) {
+        throw serverRepeatMinErr('iidexp', "'_item_' in '_item_ in _collection_' should be an identifier or '(_key_, _value_)' expression, but got '{0}'.",
+            lhs);
+      }
+
+      var valueIdentifier = match[3] || match[1];
+      var keyIdentifier = match[2];
+
+      if (aliasAs && (!/^[$a-zA-Z_][$a-zA-Z0-9_]*$/.test(aliasAs) ||
+          /^(null|undefined|this|\$index|\$first|\$middle|\$last|\$even|\$odd|\$parent|\$root|\$id)$/.test(aliasAs))) {
+        throw ngRepeatMinErr('badident', "alias '{0}' is invalid --- must be a valid JS identifier which is not a reserved name.",
+          aliasAs);
+      }
+
+      return function serverRepeatLink($scope,$element,$attr,ctrl,$transclude) {
+	var member               = $scope[lhs] = { $$scope: $scope };
+        var collection           = $scope.$parent[rhs] || [];
+	
+	for (var i = 0; i < $element.children().length; i++) {
+	  var c = angular.element($element.children()[i]);
+	  if (c[0].attributes.hasOwnProperty('server-repeat-item')) {
+	    var newObject = {};
+	    for (var j = 0; j < c[0].children.length; j++) {
+              var gc = angular.element(c[0].children[j]);
+	      if (gc[0].attributes.hasOwnProperty('server-bind')) {
+		var key = gc[0].attributes['server-bind'].value;
+		var val = gc[0].innerText;
+		newObject[key] = val;
+		console.log(gc[0]);
+		angular.element(gc[0]).attr('ng-bind', (lhs + "." + key));
+		//newObject[gc[0].attributes['server-bind'].value] = gc[0].innerText;
+	      }
+	    }
+	    // hashKey
+	    var sScope = $scope.$new(true);
+	    sScope['index'] = i;
+	    sScope[lhs] = newObject;
+	    console.log(sScope);
+	    $compile($element.children()[i])(sScope);
+	    collection.push(newObject);
+	  }
+	}
+	
+	$scope.$parent[rhs] = collection;
+	
+      }
+    }
+  }
+}).directive('serverRepeatItemDynamic', function($animate,$compile) {
   var NG_REMOVED = '$$NG_REMOVED';
-  var ngRepeatMinErr = minErr('ngRepeat');
+  var ngRepeatMinErr = minErr('serverRepeatItemDynamic');
 
   var updateScope = function(scope, index, valueIdentifier, value, keyIdentifier, key, arrayLength) {
     // TODO(perf): generate setters to shave off ~40ms or 1-1.5%
@@ -119,15 +189,12 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 
   return {
     restrict: 'A',
-    multiElement: true,
     transclude: 'element',
-    priority: 1000,
-    terminal: true,
-    $$tlb: true,
     compile: function ngRepeatCompile($element, $attr) {
-      var expression = $attr.serverRepeat;
-      //var ngRepeatEndComment = $compile.$$createComment('end ngRepeat', expression);
-      var ngRepeatEndComment = document.createComment(' end ngRepeat: ' + expression + ' ');
+      //var expression = $attr.serverRepeat;
+      var expression = $element.parent()[0].attributes['server-repeat'].nodeValue;
+      console.log(expression);
+      var ngRepeatEndComment = document.createComment(' end serverRepeatDynamic: ' + expression + ' ');
 
 
       var match = expression.match(/^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+track\s+by\s+([\s\S]+?))?\s*$/);
@@ -297,6 +364,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
               previousNode = getBlockEnd(block);
               updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
             } else {
+	      // don't animate items that are entered via sever-repeat-item
               // new item which we don't know about
               $transclude(function ngRepeatTransclude(clone, scope) {
                 block.scope = scope;
