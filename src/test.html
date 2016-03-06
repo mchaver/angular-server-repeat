@@ -3,16 +3,18 @@
   <body ng-app="ServerRepeatExample" ng-controller="testController">
 
     <div>Test</div>
-    <div server-repeat="post in posts">
+    <div server-repeat="post in posts track by $index">
       <div server-repeat-item>
 	<div server-bind="title">My First Day</div>
 	<div server-bind="author">James</div>
 	<div server-bind="summary">blah blah blah</div>
+	<button ng-click="deleteItem(0)">delete</button>
       </div>
       <div server-repeat-item-dynamic>
 	<div ng-bind="post.title"></div>
 	<div ng-bind="post.author"></div>
-	<div ng-bind="post.summary"></div>	
+	<div ng-bind="post.summary"></div>
+	<button ng-click="deleteItem($index)">delete</button>
       </div>
       <!--<div ng-bind="post.title">-->
     </div>
@@ -33,6 +35,13 @@
           console.log('click');
           $scope.posts.push({title:'123',author:'Jade',summary:'Nothing to say'});
         }
+
+        $scope.deleteItem = function(index) {
+          $scope.posts.splice(index,1);
+          console.log(index);
+          console.log($scope.posts);
+        }
+      
       });
     </script>
   </body>

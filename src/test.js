@@ -1,5 +1,7 @@
 'use strict';
 
+
+
 function isWindow(obj) {
   return obj && obj.window === obj;
 }
@@ -29,11 +31,16 @@ function getBlockNodes(nodes) {
   for (var i = 1; node !== endNode && (node = node.nextSibling); i++) {
     if (blockNodes || nodes[i] !== node) {
       if (!blockNodes) {
-        blockNodes = jqLite(slice.call(nodes, 0, i));
+        //blockNodes = jqLite(slice.call(nodes, 0, i));
+        blockNodes = Array.prototype.slice.call(nodes, 0, i);
       }
       blockNodes.push(node);
     }
   }
+
+  console.log('getBlockNodes function');
+  console.log(nodes);
+  console.log(blockNodes);
 
   return blockNodes || nodes;
 }
@@ -91,7 +98,7 @@ function hashKey(obj, nextUidFn) {
 }
 
 
-angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($parse, $animate, $compile) {
+angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($animate, $compile, $parse) {
   return {
     restrict : 'A',
     compile: function serverRepeatCompile($element, $attr) {
@@ -127,10 +134,44 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
           aliasAs);
       }
 
+      
+      var trackByExpGetter, trackByIdExpFn, trackByIdArrayFn, trackByIdObjFn;
+      var hashFnLocals = {$id: hashKey};
+
+      if (trackByExp) {
+        trackByExpGetter = $parse(trackByExp);
+      } else {
+        trackByIdArrayFn = function(key, value) {
+          return hashKey(value);
+        };
+        trackByIdObjFn = function(key) {
+          return key;
+        };
+      }
+
       return function serverRepeatLink($scope,$element,$attr,ctrl,$transclude) {
+
+        if (trackByExpGetter) {
+          trackByIdExpFn = function(key, value, index) {
+            // assign key, value, and $index to the locals so that they can be used in hash functions
+            if (keyIdentifier) hashFnLocals[keyIdentifier] = key;
+            hashFnLocals[valueIdentifier] = value;
+            hashFnLocals.$index = index;
+            return trackByExpGetter($scope, hashFnLocals);
+          };
+        }
+
 	var member               = $scope[lhs] = { $$scope: $scope };
         var collection           = $scope.$parent[rhs] || [];
-	
+
+	// get the correct function
+	var trackByIdFn;
+	if (isArrayLike(collection)) {
+          trackByIdFn = trackByIdExpFn || trackByIdArrayFn;
+        } else {
+          trackByIdFn = trackByIdExpFn || trackByIdObjFn;
+        }
+
 	for (var i = 0; i < $element.children().length; i++) {
 	  var c = angular.element($element.children()[i]);
 	  if (c[0].attributes.hasOwnProperty('server-repeat-item')) {
@@ -147,8 +188,17 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	      }
 	    }
 	    // hashKey
+	    /*
+	      key = (collection === collectionKeys) ? index : collectionKeys[index];
+              value = collection[key];
+              trackById = trackByIdFn(key, value, index);
+
+	     */
 	    var sScope = $scope.$new(true);
-	    sScope['index'] = i;
+	    console.log(i);
+	    sScope['$index'] = i;
+	    //var trackById = trackByIdFn(i,newObject,i);
+	    //console.log(trackById);
 	    sScope[lhs] = newObject;
 	    console.log(sScope);
 	    $compile($element.children()[i])(sScope);
@@ -161,7 +211,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
       }
     }
   }
-}).directive('serverRepeatItemDynamic', function($animate,$compile) {
+}).directive('serverRepeatItemDynamic', function($animate,$compile,$parse) {
   var NG_REMOVED = '$$NG_REMOVED';
   var ngRepeatMinErr = minErr('serverRepeatItemDynamic');
 
@@ -269,135 +319,176 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	  var serverSideCollection = angular.copy(serverSideCollection);
 	  var serverSideCollectionLength = serverSideCollection.length;
 	  // track indexes in case something is deleted or moved
-	  
-	  
-        //watch props
-        $scope.$watchCollection(rhs, function ngRepeatAction(collection) {
-          var index, length,
-              previousNode = $element[0],     // node that cloned nodes should be inserted after
-                                              // initialized to the comment node anchor
-              nextNode,
-              // Same as lastBlockMap but it has the current state. It will become the
-              // lastBlockMap on the next iteration.
-              nextBlockMap = createMap(),
-              collectionLength,
-              key, value, // key/value of iteration
-              trackById,
-              trackByIdFn,
-              collectionKeys,
-              block,       // last object information {scope, element, id}
-              nextBlockOrder,
-              elementsToRemove;
+	  var firstTime = true;
+	  var serverSideBlocks = createMap();
+          //watch props
+          $scope.$watchCollection(rhs, function ngRepeatAction(collection) {
+            var index, length,
+		previousNode = $element[0],     // node that cloned nodes should be inserted after
+                // initialized to the comment node anchor
+		nextNode,
+		// Same as lastBlockMap but it has the current state. It will become the
+		// lastBlockMap on the next iteration.
+		nextBlockMap = createMap(),
+		collectionLength,
+		key, value, // key/value of iteration
+		trackById,
+		trackByIdFn,
+		collectionKeys,
+		block,       // last object information {scope, element, id}
+		nextBlockOrder,
+		elementsToRemove;
 
-          if (aliasAs) {
-            $scope[aliasAs] = collection;
-          }
-
-          if (isArrayLike(collection)) {
-            collectionKeys = collection;
-            trackByIdFn = trackByIdExpFn || trackByIdArrayFn;
-          } else {
-            trackByIdFn = trackByIdExpFn || trackByIdObjFn;
-            // if object, extract keys, in enumeration order, unsorted
-            collectionKeys = [];
-            for (var itemKey in collection) {
-              if (hasOwnProperty.call(collection, itemKey) && itemKey.charAt(0) !== '$') {
-                collectionKeys.push(itemKey);
-              }
+            if (aliasAs) {
+              $scope[aliasAs] = collection;
             }
-          }
 
-          collectionLength = collectionKeys.length;
-          nextBlockOrder = new Array(collectionLength);
-
-          // locate existing items
-          for (index = 0; index < collectionLength; index++) {
-            key = (collection === collectionKeys) ? index : collectionKeys[index];
-            value = collection[key];
-            trackById = trackByIdFn(key, value, index);
-            if (lastBlockMap[trackById]) {
-              // found previously seen block
-              block = lastBlockMap[trackById];
-              delete lastBlockMap[trackById];
-              nextBlockMap[trackById] = block;
-              nextBlockOrder[index] = block;
-	      
-            } else if (nextBlockMap[trackById]) {
-              // if collision detected. restore lastBlockMap and throw an error
-              forEach(nextBlockOrder, function(block) {
-                if (block && block.scope) lastBlockMap[block.id] = block;
-              });
-              throw ngRepeatMinErr('dupes',
-                  "Duplicates in a repeater are not allowed. Use 'track by' expression to specify unique keys. Repeater: {0}, Duplicate key: {1}, Duplicate value: {2}",
-                  expression, trackById, value);
+            if (isArrayLike(collection)) {
+              collectionKeys = collection;
+              trackByIdFn = trackByIdExpFn || trackByIdArrayFn;
             } else {
-              // new never before seen block
-              nextBlockOrder[index] = {id: trackById, scope: undefined, clone: undefined};
-              nextBlockMap[trackById] = true;
-            }
-          }
-
-          // remove leftover items
-          for (var blockKey in lastBlockMap) {
-            block = lastBlockMap[blockKey];
-            elementsToRemove = getBlockNodes(block.clone);
-            $animate.leave(elementsToRemove);
-            if (elementsToRemove[0].parentNode) {
-              // if the element was not removed yet because of pending animation, mark it as deleted
-              // so that we can ignore it later
-              for (index = 0, length = elementsToRemove.length; index < length; index++) {
-                elementsToRemove[index][NG_REMOVED] = true;
+              trackByIdFn = trackByIdExpFn || trackByIdObjFn;
+              // if object, extract keys, in enumeration order, unsorted
+              collectionKeys = [];
+              for (var itemKey in collection) {
+		if (hasOwnProperty.call(collection, itemKey) && itemKey.charAt(0) !== '$') {
+                  collectionKeys.push(itemKey);
+		}
               }
             }
-            block.scope.$destroy();
-          }
 
-          // we are not using forEach for perf reasons (trying to avoid #call)
-          for (index = 0; index < collectionLength; index++) {
-            key = (collection === collectionKeys) ? index : collectionKeys[index];
-            value = collection[key];
-            block = nextBlockOrder[index];
+            collectionLength = collectionKeys.length;
+            nextBlockOrder = new Array(collectionLength);
 
-            if (block.scope) {
-              // if we have already seen this object, then we need to reuse the
-              // associated scope/element
-
-              nextNode = previousNode;
-
-              // skip nodes that are already pending removal via leave animation
-              do {
-                nextNode = nextNode.nextSibling;
-              } while (nextNode && nextNode[NG_REMOVED]);
-
-              if (getBlockStart(block) != nextNode) {
-                // existing item which got moved
-                $animate.move(getBlockNodes(block.clone), null, previousNode);
+            // locate existing items
+            for (index = 0; index < collectionLength; index++) {
+              key = (collection === collectionKeys) ? index : collectionKeys[index];
+              value = collection[key];
+              trackById = trackByIdFn(key, value, index);
+	      //console.log('track by');
+	      //console.log(key);
+	      //console.log(value);
+	      console.log(trackById);
+              if (lastBlockMap[trackById]) {
+		// found previously seen block
+		block = lastBlockMap[trackById];
+		delete lastBlockMap[trackById];
+		nextBlockMap[trackById] = block;
+		nextBlockOrder[index] = block;
+		
+              } else if (nextBlockMap[trackById]) {
+		// if collision detected. restore lastBlockMap and throw an error
+		forEach(nextBlockOrder, function(block) {
+                  if (block && block.scope) lastBlockMap[block.id] = block;
+		});
+		throw ngRepeatMinErr('dupes',
+				     "Duplicates in a repeater are not allowed. Use 'track by' expression to specify unique keys. Repeater: {0}, Duplicate key: {1}, Duplicate value: {2}",
+				     expression, trackById, value);
+              } else {
+		// new never before seen block
+		nextBlockOrder[index] = {id: trackById, scope: undefined, clone: undefined};
+		nextBlockMap[trackById] = true;
               }
-              previousNode = getBlockEnd(block);
-              updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
-            } else if (index > serverSideCollectionLength - 1) {
-	      // don't animate items that are entered via sever-repeat-item
-              // new item which we don't know about
-              $transclude(function ngRepeatTransclude(clone, scope) {
-                block.scope = scope;
-                // http://jsperf.com/clone-vs-createcomment
-                var endNode = ngRepeatEndComment.cloneNode(false);
-		//var endNode = '';
+            }
+
+
+            // remove leftover items
+            for (var blockKey in lastBlockMap) {
+              block = lastBlockMap[blockKey];
+	      console.log('getBlockNodes');
+              elementsToRemove = getBlockNodes(block.clone);
+              $animate.leave(elementsToRemove);
+              if (elementsToRemove[0].parentNode) {
+		// if the element was not removed yet because of pending animation, mark it as deleted
+		// so that we can ignore it later
+		for (index = 0, length = elementsToRemove.length; index < length; index++) {
+                  elementsToRemove[index][NG_REMOVED] = true;
+		}
+              }
+              block.scope.$destroy();
+            }
+
+            // we are not using forEach for perf reasons (trying to avoid #call)
+            for (index = 0; index < collectionLength; index++) {
+              key = (collection === collectionKeys) ? index : collectionKeys[index];
+              value = collection[key];
+              block = nextBlockOrder[index];
+
+              if (block.scope) {
+		// if we have already seen this object, then we need to reuse the
+		// associated scope/element
+
+		nextNode = previousNode;
+
+		// skip nodes that are already pending removal via leave animation
+		do {
+                  nextNode = nextNode.nextSibling;
+		} while (nextNode && nextNode[NG_REMOVED]);
+
+		if (getBlockStart(block) != nextNode) {
+                  // existing item which got moved
+                  $animate.move(getBlockNodes(block.clone), null, previousNode);
+		}
+		previousNode = getBlockEnd(block);
+		updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
+              } else if (index > serverSideCollectionLength - 1) {
+		// don't animate items that are entered via sever-repeat-item
+		// new item which we don't know about
+		$transclude(function ngRepeatTransclude(clone, scope) {
+                  block.scope = scope;
+                  // http://jsperf.com/clone-vs-createcomment
+                  var endNode = ngRepeatEndComment.cloneNode(false);
+		  //var endNode = '';
+                  clone[clone.length++] = endNode;
+                  
+                  $animate.enter(clone, null, previousNode);
+                  previousNode = endNode;
+                  // Note: We only need the first/last node of the cloned nodes.
+                  // However, we need to keep the reference to the jqlite wrapper as it might be changed later
+                  // by a directive with templateUrl when its template arrives.
+                  block.clone = clone;
+                  nextBlockMap[block.id] = block;
+                  updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
+		});
+              } else {
+		// handle items in serverside
+		console.log('server side');
+
+		block.scope = angular.element($element[0].parentElement.children[index]).scope();
+   
+		block.clone = angular.element($element[0].parentElement.children[index]);
+		nextBlockMap[block.id] = block;
+
+		/*
+		nextNode = previousNode;
+
+		// skip nodes that are already pending removal via leave animation
+		do {
+                  nextNode = nextNode.nextSibling;
+		} while (nextNode && nextNode[NG_REMOVED]);
+
+		if (getBlockStart(block) != nextNode) {
+                  // existing item which got moved
+                  $animate.move(getBlockNodes(block.clone), null, previousNode);
+		}
+		previousNode = getBlockEnd(block);
+		updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
+		*/
+                /*
+		var endNode = ngRepeatEndComment.cloneNode(false);
+
+		var clone = angular.element($element[0].parentElement.children[index]);
                 clone[clone.length++] = endNode;
 
-                $animate.enter(clone, null, previousNode);
-                previousNode = endNode;
-                // Note: We only need the first/last node of the cloned nodes.
-                // However, we need to keep the reference to the jqlite wrapper as it might be changed later
-                // by a directive with templateUrl when its template arrives.
+		previousNode = endNode;  
                 block.clone = clone;
-                nextBlockMap[block.id] = block;
-                updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
-              });
+		nextBlockMap[block.id] = block;
+		updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
+                */
+	      }
             }
-          }
-          lastBlockMap = nextBlockMap;
-        });
+            lastBlockMap = nextBlockMap;
+          });
 	  remove();
 	});
       };
