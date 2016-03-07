@@ -8,7 +8,22 @@
 	<div server-bind="post.title">My First Day</div>
 	<div server-bind="post.author">James</div>
 	<div server-bind="post.summary">blah blah blah</div>
+	<div server-bind="post.test.test">testing1</div>
 	<button ng-click="deleteItem(0)">delete</button>
+      </div>
+      <div server-repeat-item>
+	<div server-bind="post.title">My Second Day</div>
+	<div server-bind="post.author">Johnny</div>
+	<div server-bind="post.summary">blah blah</div>
+	<div server-bind="post.test.test">testing2</div>
+	<button ng-click="deleteItem(1)">delete</button>
+      </div>
+      <div server-repeat-item>
+	<div server-bind="post.title">My Third Day</div>
+	<div server-bind="post.author">James</div>
+	<div server-bind="post.summary">blah</div>
+	<div server-bind="post.test.test">testing3</div>
+	<button ng-click="deleteItem(2)">delete</button>
       </div>
       <div server-repeat-item-dynamic>
 	<div ng-bind="post.title"></div>
@@ -37,9 +52,12 @@
         }
 
         $scope.deleteItem = function(index) {
-          $scope.posts.splice(index,1);
-          console.log(index);
+          console.log('deleteItem');
           console.log($scope.posts);
+          console.log(index);
+          $scope.posts.splice(index,1);
+          //console.log(index);
+          //console.log($scope.posts);
         }
       
       });

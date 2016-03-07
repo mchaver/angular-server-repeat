@@ -37,13 +37,11 @@ function parseKey(keyText) {
     throw "'parseVarAndKey Error': you must provide a value and one or more keys: 'value.key'."
   }
   //var key = tokens[0];
-  
-  return {scopeVar:tokens[0],key:tokens.splice(1,tokens.length).join('.')};
+  return {scopeVar:tokens[0],keys:tokens.splice(1,tokens.length)};
+  //return {scopeVar:tokens[0],key:tokens.splice(1,tokens.length).join('.')};
 }
 
-console.log(parseKey('post.title'));
-console.log(parseKey('post.title.author'));
-console.log(parseKey('post.title.james.asdf'));
+
 
 function isWindow(obj) {
   return obj && obj.window === obj;
@@ -223,17 +221,45 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	  var c = angular.element($element.children()[i]);
 	  if (c[0].attributes.hasOwnProperty('server-repeat-item')) {
 	    var newObject = {};
+
 	    for (var j = 0; j < c[0].children.length; j++) {
               var gc = angular.element(c[0].children[j]);
 	      if (gc[0].attributes.hasOwnProperty('server-bind')) {
-		var scopeVarAndKey = parseKey(gc[0].attributes['server-bind'].value);
-		var scopeVar = scopeVarAndKey.scopeVar;
-		var key = scopeVarAndKey.key
+		var scopeVarAndKeys = parseKey(gc[0].attributes['server-bind'].value);
+		var scopeVar = scopeVarAndKeys.scopeVar;
+		var keys = scopeVarAndKeys.keys;
 		var val = gc[0].innerText;
-		newObject[key] = val;
-		console.log(gc[0]);
-		angular.element(gc[0]).attr('ng-bind', (scopeVar + "." + key));
-		//newObject[gc[0].attributes['server-bind'].value] = gc[0].innerText;
+		// hashes only right now, not able to distinguish arrays yet
+		// need a way to handle that
+
+		/*
+		var keysLength = keys.length;
+		for (var k = 0; k < keysLength; k++) {
+                  if (k === keysLength - 1) {
+                    newObject[keys[k]] = val;
+		  }
+		}
+		*/
+		
+                var newObjectPointer = newObject;
+		var keysLength = keys.length;
+		for (var k = 0; k < keysLength; k++) {
+		  if (k === keysLength - 1) {
+		    // add value, push value to an array, or initialize the array
+		    newObjectPointer[keys[k]] = val
+		  } else {
+		    // hash does not exist, create it
+		    if (!newObjectPointer.hasOwnProperty(keys[k])) {
+		      newObjectPointer[keys[k]] = {};
+		    }
+		    newObjectPointer = newObjectPointer[keys[k]];
+		  }
+		}
+		
+		//newObject[keys[0]] = val;
+		//newObject[keys[0]] = angular.copy(newObjectPointer[keys[0]]);
+
+		angular.element(gc[0]).attr('ng-bind', (scopeVar + "." + keys.join('.')));
 	      }
 	    }
 	    // hashKey
@@ -243,18 +269,19 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
               trackById = trackByIdFn(key, value, index);
 
 	     */
-	    var sScope = $scope.$new(true);
-	    console.log(i);
-	    sScope['$index'] = i;
-	    //var trackById = trackByIdFn(i,newObject,i);
-	    //console.log(trackById);
-	    sScope[lhs] = newObject;
-	    console.log(sScope);
-	    $compile($element.children()[i])(sScope);
+	    var newScope = $scope.$new(true);
+	    newScope['$index'] = i;
+
+	    newScope[lhs] = newObject;
+
+	    console.log(newScope);
+	    $compile($element.children()[i])(newScope);
 	    collection.push(newObject);
 	  }
 	}
-	
+	console.log('bind to parent');
+	console.log(collection);
+	console.log(rhs);
 	$scope.$parent[rhs] = collection;
 	
       }
@@ -371,6 +398,8 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	  var firstTime = true;
 	  var serverSideBlocks = createMap();
           //watch props
+	  console.log('serverSideCollection');
+          console.log(serverSideCollection);	  
           $scope.$watchCollection(rhs, function ngRepeatAction(collection) {
             var index, length,
 		previousNode = $element[0],     // node that cloned nodes should be inserted after
@@ -414,9 +443,6 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
               key = (collection === collectionKeys) ? index : collectionKeys[index];
               value = collection[key];
               trackById = trackByIdFn(key, value, index);
-	      //console.log('track by');
-	      //console.log(key);
-	      //console.log(value);
 	      console.log(trackById);
               if (lastBlockMap[trackById]) {
 		// found previously seen block
@@ -441,6 +467,9 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
             }
 
 
+	    // ** need to readjust the serverSideCollection size if an item
+	    // from the serverSideCollection gets deleted
+	    
             // remove leftover items
             for (var blockKey in lastBlockMap) {
               block = lastBlockMap[blockKey];
@@ -502,10 +531,11 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
               } else {
 		// handle items in serverside
 		console.log('server side');
-
+                  
 		block.scope = angular.element($element[0].parentElement.children[index]).scope();
    
 		block.clone = angular.element($element[0].parentElement.children[index]);
+                console.log(block);
 		nextBlockMap[block.id] = block;
 
 		/*
