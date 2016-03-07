@@ -1,11 +1,56 @@
 'use strict';
 
+// poor man's parser
+// text to javascript key
+function parseKey(keyText) {
+  var tokens = [];
+  var keyTextLength = keyText.length;
+  var prev = null;
+  var curr = '';
 
+  for (var i = 0; i < keyTextLength; i++) {
+    var c = keyText[i];
+
+    if (c === '.') {
+      if (prev === '.') {
+	throw "'parseVarAndKey Error': .. is an invalid char sequence."
+      } else if (i === keyTextLength - 1) {
+	throw "'parseVarAndKey Error': .. is an invalid char sequence."
+      } else {
+	tokens.push(curr);
+	curr = '';
+	prev = c;
+      }
+    } else {
+      if (i === keyTextLength -1) {
+	// last char in sequence
+	curr += c;
+	tokens.push(curr);
+      } else {
+	curr += c;
+	prev = c;
+      }
+    }
+  }
+
+  if (tokens.length < 2) {
+    throw "'parseVarAndKey Error': you must provide a value and one or more keys: 'value.key'."
+  }
+  //var key = tokens[0];
+  
+  return {scopeVar:tokens[0],key:tokens.splice(1,tokens.length).join('.')};
+}
+
+console.log(parseKey('post.title'));
+console.log(parseKey('post.title.author'));
+console.log(parseKey('post.title.james.asdf'));
 
 function isWindow(obj) {
   return obj && obj.window === obj;
 }
+
 var uid = 0;
+
 var isArray = Array.isArray;
 function nextUid() {
   return ++uid;
@@ -105,6 +150,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
       var expression = $attr.serverRepeat;
       var serverRepeatMinErr = minErr('serverRepeat');
 
+      //console.log(parseKey('post.title'));
 
       var match = expression.match(/^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+track\s+by\s+([\s\S]+?))?\s*$/);
 
@@ -161,6 +207,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
           };
         }
 
+
 	var member               = $scope[lhs] = { $$scope: $scope };
         var collection           = $scope.$parent[rhs] || [];
 
@@ -179,11 +226,13 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	    for (var j = 0; j < c[0].children.length; j++) {
               var gc = angular.element(c[0].children[j]);
 	      if (gc[0].attributes.hasOwnProperty('server-bind')) {
-		var key = gc[0].attributes['server-bind'].value;
+		var scopeVarAndKey = parseKey(gc[0].attributes['server-bind'].value);
+		var scopeVar = scopeVarAndKey.scopeVar;
+		var key = scopeVarAndKey.key
 		var val = gc[0].innerText;
 		newObject[key] = val;
 		console.log(gc[0]);
-		angular.element(gc[0]).attr('ng-bind', (lhs + "." + key));
+		angular.element(gc[0]).attr('ng-bind', (scopeVar + "." + key));
 		//newObject[gc[0].attributes['server-bind'].value] = gc[0].innerText;
 	      }
 	    }
