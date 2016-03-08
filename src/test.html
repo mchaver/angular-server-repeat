@@ -9,6 +9,14 @@
 	<div server-bind="post.author">James</div>
 	<div server-bind="post.summary">blah blah blah</div>
 	<div server-bind="post.test.test">testing1</div>
+	<div server-repeat="user in post.users">
+	  <div server-repeat-item>
+	    <div server-bind="user.name">Bob</div>
+	  </div>
+	  <div server-repeat-item>
+	    <div server-bind="user.name">George</div>
+	  </div>
+	</div>
 	<button ng-click="deleteItem(0)">delete</button>
       </div>
       <div server-repeat-item>
@@ -16,6 +24,12 @@
 	<div server-bind="post.author">Johnny</div>
 	<div server-bind="post.summary">blah blah</div>
 	<div server-bind="post.test.test">testing2</div>
+	<div server-repeat="user in post.users">
+	  <div server-repeat-item>
+	    <div server-bind="user.name">Ricardo</div>
+	  </div>
+	</div>
+
 	<button ng-click="deleteItem(1)">delete</button>
       </div>
       <div server-repeat-item>
@@ -49,6 +63,8 @@
         $scope.testClick = function() {
           console.log('click');
           $scope.posts.push({title:'123',author:'Jade',summary:'Nothing to say'});
+          console.log($scope.posts);
+          console.log($scope);
         }
 
         $scope.deleteItem = function(index) {
@@ -59,7 +75,7 @@
           //console.log(index);
           //console.log($scope.posts);
         }
-      
+
       });
     </script>
   </body>

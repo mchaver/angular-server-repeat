@@ -144,6 +144,9 @@ function hashKey(obj, nextUidFn) {
 angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($animate, $compile, $parse) {
   return {
     restrict : 'A',
+    priority : 1000,
+    //terminal : true,
+    //$$tlb: true,
     compile: function serverRepeatCompile($element, $attr) {
       var expression = $attr.serverRepeat;
       var serverRepeatMinErr = minErr('serverRepeat');
@@ -193,8 +196,10 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
         };
       }
 
-      return function serverRepeatLink($scope,$element,$attr,ctrl,$transclude) {
-
+      // pre should require parent functions to be compiled first
+      return {pre: function serverRepeatLink($scope,$element,$attr,ctrl,$transclude) {
+        console.log('pre:');
+	console.log(rhs);
         if (trackByExpGetter) {
           trackByIdExpFn = function(key, value, index) {
             // assign key, value, and $index to the locals so that they can be used in hash functions
@@ -205,26 +210,58 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
           };
         }
 
+	function getCollection(lhs,rhs) {
+	  var collection;
+	  
+	  if (rhs.indexOf('.') > -1) {
+	    var parentAliasAndChildName = rhs.split('.');
+	    var parentAlias = parentAliasAndChildName[0];
+	    var parentName = $scope.$parent['collectionAliases'][parentAlias];
+	    var childAlias = lhs;
+	    var childName  = parentAliasAndChildName[1];
+	    var collections = $scope.$parent[parentName];
 
-	var member               = $scope[lhs] = { $$scope: $scope };
-        var collection           = $scope.$parent[rhs] || [];
+	    console.log('collections:');
+	    console.log(collections);
+	    var parentCollection = collections[collections.length-1];
+            
+	    parentCollection[childName] = [];
+	    collection = parentCollection[childName];
+	    /*
+	    if (parentCollection.hasOwnProperty(childName)) {
+	      
+	    } else {
 
-	// get the correct function
-	var trackByIdFn;
-	if (isArrayLike(collection)) {
-          trackByIdFn = trackByIdExpFn || trackByIdArrayFn;
-        } else {
-          trackByIdFn = trackByIdExpFn || trackByIdObjFn;
-        }
+	    }
+	    */
+	  } else if ($scope.$parent[rhs]) {
+	    collection = $scope.$parent[rhs];
+	  } else {
+	    if (!$scope.$parent.hasOwnProperty('collectionAliases')) {
+	      $scope.$parent['collectionAliases'] = {};
+	    }
+	    $scope.$parent['collectionAliases'][lhs] = rhs;
+	    $scope.$parent[rhs] = [];
+	    collection = $scope.$parent[rhs];
+	  }
+	  return collection;
+	}
+
+        //var collection           = $scope.$parent[rhs] || [];
+	var collection = getCollection(lhs,rhs);
 
 	for (var i = 0; i < $element.children().length; i++) {
 	  var c = angular.element($element.children()[i]);
+
 	  if (c[0].attributes.hasOwnProperty('server-repeat-item')) {
 	    var newObject = {};
 
 	    for (var j = 0; j < c[0].children.length; j++) {
               var gc = angular.element(c[0].children[j]);
 	      if (gc[0].attributes.hasOwnProperty('server-bind')) {
+		// top level server-bind
+		// go all the way to the bottom, if there are server-bindchildren server-repeat-item
+		// them capture the value as array
 		var scopeVarAndKeys = parseKey(gc[0].attributes['server-bind'].value);
 		var scopeVar = scopeVarAndKeys.scopeVar;
 		var keys = scopeVarAndKeys.keys;
@@ -256,9 +293,6 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 		  }
 		}
 		
-		//newObject[keys[0]] = val;
-		//newObject[keys[0]] = angular.copy(newObjectPointer[keys[0]]);
-
 		angular.element(gc[0]).attr('ng-bind', (scopeVar + "." + keys.join('.')));
 	      }
 	    }
@@ -271,20 +305,21 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	     */
 	    var newScope = $scope.$new(true);
 	    newScope['$index'] = i;
-
+            newScope['$$serverSide'] = true;
 	    newScope[lhs] = newObject;
-
+               
 	    console.log(newScope);
-	    $compile($element.children()[i])(newScope);
 	    collection.push(newObject);
+	    $compile($element.children()[i])(newScope);
+	   
 	  }
 	}
-	console.log('bind to parent');
-	console.log(collection);
 	console.log(rhs);
-	$scope.$parent[rhs] = collection;
-	
-      }
+        
+	console.log('directive scope')
+	console.log($scope);
+      }, post: angular.noop}
+            
     }
   }
 }).directive('serverRepeatItemDynamic', function($animate,$compile,$parse) {
@@ -315,6 +350,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 
   return {
     restrict: 'A',
+    priority: 1000,
     transclude: 'element',
     compile: function ngRepeatCompile($element, $attr) {
 
