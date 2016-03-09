@@ -81,10 +81,6 @@ function getBlockNodes(nodes) {
     }
   }
 
-  console.log('getBlockNodes function');
-  console.log(nodes);
-  console.log(blockNodes);
-
   return blockNodes || nodes;
 }
 
@@ -177,26 +173,50 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
           aliasAs);
       }
 
+      // replace lhs with valueIdentifer
+
       // pre should require parent functions to be compiled first
       return {pre: function serverRepeatLink($scope,$element,$attr,ctrl,$transclude) {
 
 	// this is very dependent on compile order
 	// if compile order is altered then this will break
+	// it assumes that its parents were compiled first and
+	// that its uncle nodes have not been compiled yet
+	// otherwise parentCollection will have the incorrect value, it gets the last one
 	function getCollection(lhs,rhs) {
 	  var collection;
 	  var collectionName = '';
 	  if (rhs.indexOf('.') > -1) {
-	    var parentAliasAndChildName = rhs.split('.');
-	    var parentAlias = parentAliasAndChildName[0];
-	    var parentName = $scope.$parent['$$collectionAliases'][parentAlias];
-	    var childAlias = lhs;
-	    var childName  = parentAliasAndChildName[1];
+	    // possibly has more than one child
+	    var names = rhs.split('.');
+	    var parentAlias = names[0];
+	    var parentName  = $scope.$parent['$$collectionAliases'][parentAlias];
+
 	    var collections = $scope.$parent[parentName];
 	    var parentCollection = collections[collections.length-1];
             
+	    var namesLength = names.length;
+	    var childAlias = lhs;
+	    var childName = names[namesLength - 1];
+	    var middleVarNames = [];
+	    for (var i = 1; i < namesLength - 1; i++) {
+	      middleVarNames.push(names[i]);
+	    }
+
+	    // point to the correct collection
 	    parentCollection[childName] = [];
-	    collection = parentCollection[childName];
-	    collectionName = parentName + '[' + String(collections.length-1) + '].' + childName + '[' + String(parentCollection[childName].length) + ']';
+
+	    collection = parentCollection;
+	    for (var i = 0; i < middleVarNames.length; i++) {
+	      // set value as {}
+	      collection[middleVarNames[i]] = {};
+	      collection = collection[middleVarNames[i]];
+	    }
+	    collection[childName] = [];
+	    collection = collection[childName];
+	    
+	    collectionName = parentName + '[' + String(collections.length-1) + '].' + names.join('.');
+	    //collectionName = parentName + '[' + String(collections.length-1) + '].' + childName + '[' + String(parentCollection[childName].length) + ']';
 	  } else if ($scope.$parent[rhs]) {
             
 	    collection = $scope.$parent[rhs];
@@ -249,24 +269,26 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 		    newObjectPointer = newObjectPointer[keys[k]];
 		  }
 		}
-		
+
+		// optional ng-bind available, this creates two way data binding
+		// if ng-bind is not added then changes from the controller will not be reflected
+		// in the html
 		angular.element(gc[0]).attr('ng-bind', (scopeVar + "." + keys.join('.')));
 	      }
 	    }
-	    // hashKey
+
+	    collection.push(newObject);
 
 	    var newScope = $scope.$new(true);
-	    newScope['$index'] = i;
-            newScope['$$serverSide'] = true;
-	    newScope.$$test = collectionName + '[' + String(i) + ']';
-	    //newScope['$$test'] = collectionName;
-	    //console.log('collectionName: ' + collectionName);
+            newScope.$$serverSide = true;
+	    newScope.$$parentName = collectionName + '[' + String(i) + ']';
 	    newScope[lhs] = newObject;
-               
-	    collection.push(newObject);
+
 	    $compile($element.children()[i])(newScope);
 	  }
 	}
+
+	// check for server-repeat-item-dynamic at the same level
       }, post: angular.noop}            
     }
   }
@@ -381,18 +403,11 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	if ($scope.$parent.hasOwnProperty(rhs)) {
 	  vi = rhs;
 	} else {
-	  //$scope.$$collectionAliases['post']
-
-	  vi = angular.element($element[0].parentElement).scope().$$test + '.' + rhs.split('.')[1];
-	  console.log(vi);
-	  //vi = 'posts[0].users';
-	  //vi = $scope.$parent.posts[0].users;
+	  var records = rhs.split('.');
+	  records = records.splice(1,records.length).join('.');
+	  vi = angular.element($element[0].parentElement).scope().$$parentName + '.' + records;
 	}
 
-	console.log($element);
-	console.log($scope);
-	//console.log($element);
-	console.log(angular.element($element[0].parentElement).scope());
 	var watchServerSideCollectionOnce = $scope.$watchCollection(vi, function(serverSideCollection) {
 	  console.log(serverSideCollection);
 	  $scope.$watchCollection(vi, function serverRepeatAction(collection) {
@@ -463,9 +478,6 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
               }
             }
 
-
-	    // ** need to readjust the serverSideCollection size if an item
-	    // from the serverSideCollection gets deleted
 	    
             // remove leftover items
             for (var blockKey in lastBlockMap) {
@@ -507,9 +519,11 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 		previousNode = getBlockEnd(block);
 		updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
 	      } else {
+		//** do non-bound server-repeats have scope?
+		//** need to make sure
 		var eScope = angular.element($element[0].parentElement.children[index]).scope();
 		if (eScope && eScope.hasOwnProperty('$$serverSide') && eScope['$$serverSide']) {
-		  // handle items in serverside
+		  // handle items from serverside
 		  block.scope = angular.element($element[0].parentElement.children[index]).scope();
 		  block.clone = angular.element($element[0].parentElement.children[index]);
 		  nextBlockMap[block.id] = block;
