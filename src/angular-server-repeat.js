@@ -1,3 +1,59 @@
+'use strict';
+
+// poor man's parser
+// text to javascript key
+function parseKey(keyText) {
+  var tokens = [];
+  var keyTextLength = keyText.length;
+  var prev = null;
+  var curr = '';
+
+  for (var i = 0; i < keyTextLength; i++) {
+    var c = keyText[i];
+
+    if (c === '.') {
+      if (prev === '.') {
+	throw "'parseVarAndKey Error': .. is an invalid char sequence."
+      } else if (i === keyTextLength - 1) {
+	throw "'parseVarAndKey Error': .. is an invalid char sequence."
+      } else {
+	tokens.push(curr);
+	curr = '';
+	prev = c;
+      }
+    } else {
+      if (i === keyTextLength -1) {
+	// last char in sequence
+	curr += c;
+	tokens.push(curr);
+      } else {
+	curr += c;
+	prev = c;
+      }
+    }
+  }
+
+  if (tokens.length < 2) {
+    throw "'parseVarAndKey Error': you must provide a value and one or more keys: 'value.key'."
+  }
+
+  return {scopeVar:tokens[0],keys:tokens.splice(1,tokens.length)};
+  //return {scopeVar:tokens[0],key:tokens.splice(1,tokens.length).join('.')};
+}
+
+
+
+function isWindow(obj) {
+  return obj && obj.window === obj;
+}
+
+var uid = 0;
+
+var isArray = Array.isArray;
+function nextUid() {
+  return ++uid;
+}
+
 var minErr = function minErr (module, constructor) {
   return function (){
     var ErrorConstructor = constructor || Error;
@@ -18,11 +74,16 @@ function getBlockNodes(nodes) {
   for (var i = 1; node !== endNode && (node = node.nextSibling); i++) {
     if (blockNodes || nodes[i] !== node) {
       if (!blockNodes) {
-        blockNodes = jqLite(slice.call(nodes, 0, i));
+        //blockNodes = jqLite(slice.call(nodes, 0, i));
+        blockNodes = Array.prototype.slice.call(nodes, 0, i);
       }
       blockNodes.push(node);
     }
   }
+
+  console.log('getBlockNodes function');
+  console.log(nodes);
+  console.log(blockNodes);
 
   return blockNodes || nodes;
 }
@@ -59,9 +120,159 @@ function containsObject(obj, list) {
   return result;
 }
 
-angular.module('ServerRepeat', ['ngAnimate']).directive('serverRepeat', function($parse, $animate, $compile) {
+function hashKey(obj, nextUidFn) {
+  var key = obj && obj.$$hashKey;
+
+  if (key) {
+    if (typeof key === 'function') {
+      key = obj.$$hashKey();
+    }
+    return key;
+  }
+
+  var objType = typeof obj;
+  if (objType == 'function' || (objType == 'object' && obj !== null)) {
+    key = obj.$$hashKey = objType + ':' + (nextUidFn || nextUid)();
+  } else {
+    key = objType + ':' + obj;
+  }
+
+  return key;
+}
+
+
+angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($animate, $compile, $parse) {
+  return {
+    restrict : 'A',
+    priority : 1000,
+    compile: function serverRepeatCompile($element, $attr) {
+      var expression = $attr.serverRepeat;
+      var serverRepeatMinErr = minErr('serverRepeat');
+
+      var match = expression.match(/^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+track\s+by\s+([\s\S]+?))?\s*$/);
+
+      if (!match) {
+        throw serverRepeatMinErr('iexp', "Expected expression in form of '_item_ in _collection_[ track by _id_]' but got '{0}'.",
+            expression);
+      }
+
+      var lhs = match[1];
+      var rhs = match[2];
+      var aliasAs = match[3];
+      var trackByExp = match[4];
+
+      match = lhs.match(/^(?:(\s*[\$\w]+)|\(\s*([\$\w]+)\s*,\s*([\$\w]+)\s*\))$/);
+
+      if (!match) {
+        throw serverRepeatMinErr('iidexp', "'_item_' in '_item_ in _collection_' should be an identifier or '(_key_, _value_)' expression, but got '{0}'.",
+            lhs);
+      }
+
+      var valueIdentifier = match[3] || match[1];
+      var keyIdentifier = match[2];
+
+      if (aliasAs && (!/^[$a-zA-Z_][$a-zA-Z0-9_]*$/.test(aliasAs) ||
+          /^(null|undefined|this|\$index|\$first|\$middle|\$last|\$even|\$odd|\$parent|\$root|\$id)$/.test(aliasAs))) {
+        throw serverRepeatMinErr('badident', "alias '{0}' is invalid --- must be a valid JS identifier which is not a reserved name.",
+          aliasAs);
+      }
+
+      // pre should require parent functions to be compiled first
+      return {pre: function serverRepeatLink($scope,$element,$attr,ctrl,$transclude) {
+
+	// this is very dependent on compile order
+	// if compile order is altered then this will break
+	function getCollection(lhs,rhs) {
+	  var collection;
+	  var collectionName = '';
+	  if (rhs.indexOf('.') > -1) {
+	    var parentAliasAndChildName = rhs.split('.');
+	    var parentAlias = parentAliasAndChildName[0];
+	    var parentName = $scope.$parent['$$collectionAliases'][parentAlias];
+	    var childAlias = lhs;
+	    var childName  = parentAliasAndChildName[1];
+	    var collections = $scope.$parent[parentName];
+	    var parentCollection = collections[collections.length-1];
+            
+	    parentCollection[childName] = [];
+	    collection = parentCollection[childName];
+	    collectionName = parentName + '[' + String(collections.length-1) + '].' + childName + '[' + String(parentCollection[childName].length) + ']';
+	  } else if ($scope.$parent[rhs]) {
+            
+	    collection = $scope.$parent[rhs];
+	    collectionName = rhs; // + '[' + String($scope.$parent[rhs].length) + ']';
+	  } else {
+	    if (!$scope.$parent.hasOwnProperty('$$collectionAliases')) {
+	      $scope.$parent['$$collectionAliases'] = {};
+	    }
+	    $scope.$parent['$$collectionAliases'][lhs] = rhs;
+	    $scope.$parent[rhs] = [];
+	    collection = $scope.$parent[rhs];
+	    collectionName = rhs;
+	  }
+	  return {collection:collection,collectionName:collectionName};
+	}
+
+	var cs = getCollection(lhs,rhs);
+        var collection     = cs.collection;
+	var collectionName = cs.collectionName;
+	for (var i = 0; i < $element.children().length; i++) {
+	  var c = angular.element($element.children()[i]);
+
+	  if (c[0].attributes.hasOwnProperty('server-repeat-item')) {
+	    var newObject = {};
+
+	    for (var j = 0; j < c[0].children.length; j++) {
+              var gc = angular.element(c[0].children[j]);
+	      if (gc[0].attributes.hasOwnProperty('server-bind')) {
+		// top level server-bind
+		// go all the way to the bottom, if there are server-bindchildren server-repeat-item
+		// them capture the value as array
+		var scopeVarAndKeys = parseKey(gc[0].attributes['server-bind'].value);
+		var scopeVar = scopeVarAndKeys.scopeVar;
+		var keys = scopeVarAndKeys.keys;
+		var val = gc[0].innerText;
+		// hashes only right now, not able to distinguish arrays yet
+		// need a way to handle that
+		
+                var newObjectPointer = newObject;
+		var keysLength = keys.length;
+		for (var k = 0; k < keysLength; k++) {
+		  if (k === keysLength - 1) {
+		    // add value, push value to an array, or initialize the array
+		    newObjectPointer[keys[k]] = val
+		  } else {
+		    // hash does not exist, create it
+		    if (!newObjectPointer.hasOwnProperty(keys[k])) {
+		      newObjectPointer[keys[k]] = {};
+		    }
+		    newObjectPointer = newObjectPointer[keys[k]];
+		  }
+		}
+		
+		angular.element(gc[0]).attr('ng-bind', (scopeVar + "." + keys.join('.')));
+	      }
+	    }
+	    // hashKey
+
+	    var newScope = $scope.$new(true);
+	    newScope['$index'] = i;
+            newScope['$$serverSide'] = true;
+	    newScope.$$test = collectionName + '[' + String(i) + ']';
+	    //newScope['$$test'] = collectionName;
+	    //console.log('collectionName: ' + collectionName);
+	    newScope[lhs] = newObject;
+               
+	    collection.push(newObject);
+	    $compile($element.children()[i])(newScope);
+	  }
+	}
+      }, post: angular.noop}            
+    }
+  }
+}).directive('serverRepeatItemDynamic', function($animate,$compile,$parse) {
   var NG_REMOVED = '$$NG_REMOVED';
-  var serverRepeatMinErr = minErr('serverRepeat');
+  var serverRepeatMinErr = minErr('serverRepeatItemDynamic');
 
   var updateScope = function(scope, index, valueIdentifier, value, keyIdentifier, key, arrayLength) {
     // TODO(perf): generate setters to shave off ~40ms or 1-1.5%
@@ -84,13 +295,21 @@ angular.module('ServerRepeat', ['ngAnimate']).directive('serverRepeat', function
     return block.clone[block.clone.length - 1];
   };
 
+
   return {
     restrict: 'A',
-    //multiElement: true,
-    $$tlb: true,
+    priority: 1000,
+    transclude: 'element',
     compile: function serverRepeatCompile($element, $attr) {
-      var expression = $attr.serverRepeat;
-      //var serverRepeatEndComment = $compile.$$createComment('end serverRepeat', expression);
+
+      // must be the direct child of server-repeat
+      if (!$element.parent().length > 0 && !$element.parent()[0].attributes.hasOwnProperty('server-repeat')) {
+	throw serverRepeatMinErr('iexp', '')
+      }
+      
+      var expression = $element.parent()[0].attributes['server-repeat'].nodeValue;
+      var serverRepeatEndComment = document.createComment(' end serverRepeatDynamic: ' + expression + ' ');
+
 
       var match = expression.match(/^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+track\s+by\s+([\s\S]+?))?\s*$/);
 
@@ -110,19 +329,17 @@ angular.module('ServerRepeat', ['ngAnimate']).directive('serverRepeat', function
         throw serverRepeatMinErr('iidexp', "'_item_' in '_item_ in _collection_' should be an identifier or '(_key_, _value_)' expression, but got '{0}'.",
             lhs);
       }
-      
       var valueIdentifier = match[3] || match[1];
       var keyIdentifier = match[2];
 
       if (aliasAs && (!/^[$a-zA-Z_][$a-zA-Z0-9_]*$/.test(aliasAs) ||
           /^(null|undefined|this|\$index|\$first|\$middle|\$last|\$even|\$odd|\$parent|\$root|\$id)$/.test(aliasAs))) {
-        throw ngRepeatMinErr('badident', "alias '{0}' is invalid --- must be a valid JS identifier which is not a reserved name.",
+        throw serverRepeatMinErr('badident', "alias '{0}' is invalid --- must be a valid JS identifier which is not a reserved name.",
           aliasAs);
       }
 
-
       var trackByExpGetter, trackByIdExpFn, trackByIdArrayFn, trackByIdObjFn;
-      // var hashFnLocals = {$id: hashKey};
+      var hashFnLocals = {$id: hashKey};
 
       if (trackByExp) {
         trackByExpGetter = $parse(trackByExp);
@@ -136,168 +353,191 @@ angular.module('ServerRepeat', ['ngAnimate']).directive('serverRepeat', function
       }
 
       return function serverRepeatLink($scope, $element, $attr, ctrl, $transclude) {
-	var member               = $scope[lhs] = { $$scope: $scope };
-        var collection           = $scope.$parent[rhs] || [];
+
+        if (trackByExpGetter) {
+          trackByIdExpFn = function(key, value, index) {
+            // assign key, value, and $index to the locals so that they can be used in hash functions
+            if (keyIdentifier) hashFnLocals[keyIdentifier] = key;
+            hashFnLocals[valueIdentifier] = value;
+            hashFnLocals.$index = index;
+            return trackByExpGetter($scope, hashFnLocals);
+          };
+        }
+
+        // Store a list of elements from previous run. This is a hash where key is the item from the
+        // iterator, and the value is objects with following properties.
+        //   - scope: bound scope
+        //   - element: previous element.
+        //   - index: position
+        //
+        // We are using no-proto object so that we don't need to guard against inherited props via
+        // hasOwnProperty.
+        var lastBlockMap = createMap();
+
+	// this is very dependent on compile order
+	// if compile order is altered then this will break
 	
-	for (var i = 0; i < $element.children().length; i++) {
-	  var c = angular.element($element.children()[i]);
-	  if (c[0].attributes.hasOwnProperty('server-repeat-item')) {
-	    var newObject = {};
-	    for (var j = 0; j < c[0].children.length; j++) {
-              var gc = angular.element(c[0].children[j]);
-	      if (gc[0].attributes.hasOwnProperty('server-bind')) {
-		var key = gc[0].attributes['server-bind'].value;
-		var val = gc[0].innerText;
-		newObject[key] = val;
-		console.log(gc[0]);
-		angular.element(gc[0]).attr('ng-bind', (lhs + "." + key));
-		//newObject[gc[0].attributes['server-bind'].value] = gc[0].innerText;
-	      }
-	    }
-	    // hashKey
-	    var sScope = $scope.$new(true);
-	    sScope['index'] = i;
-	    sScope[lhs] = newObject;
-	    console.log(sScope);
-	    $compile($element.children()[i])(sScope);
-	    collection.push(newObject);
-	  }
-	}
-	
-	$scope.$parent[rhs] = collection;
-        // watch here if serverRepeatItemDynamic does not exist
-	// this means there are no dynamic elements
-	/*
-	$scope.$parent.$watchCollection(rhs, function(u) {
-          console.log('change in top');
-	});
-	*/
-      }
-    }
-  }
-}).directive('serverRepeatItemDynamic', function($animate,$compile) {
-  return {
-    restrict : 'A',
-    transclude : 'element',
-    compile: function($element, $attr) {
-      //var expression = $attr.serverRepeatItemDynamic;
-      var serverRepeatItemDynamicMinErr = minErr('serverRepeatItemDynamic');
-      //var serverRepeatItemDynamicEndComment = $compile.$$createComment('end serverRepeatItemDynamic',expression) 
-      return function($scope, $element, $attr, ctrl, $transclude) {
-        //console.log($scope);
-	//console.log($scope.post);
-	//console.log($scope.$$childHead);
-	if (!$element.parent().length > 0 &&
-	  !$element.parent()[0].attributes.hasOwnProperty('server-repeat')) {
-	  throw serverRepeatItemDynamicMinErr('badident', 'requires server-repeat as an immediate parent', $element.parent());
+	var vi;
+	if ($scope.$parent.hasOwnProperty(rhs)) {
+	  vi = rhs;
+	} else {
+	  //$scope.$$collectionAliases['post']
+
+	  vi = angular.element($element[0].parentElement).scope().$$test + '.' + rhs.split('.')[1];
+	  console.log(vi);
+	  //vi = 'posts[0].users';
+	  //vi = $scope.$parent.posts[0].users;
 	}
 
-	var expression = $element.parent()[0].attributes['server-repeat'].nodeValue;
-	var match = expression.match(/^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+track\s+by\s+([\s\S]+?))?\s*$/);
-	if (!match) {
-          throw serverRepeatMinErr('iexp', "Expected expression in form of '_item_ in _collection_[ track by _id_]' but got '{0}'.",
-				   expression);
-	}
-	var lhs = match[1];
-	var rhs = match[2];
-
-	//var serverSideCollection = $scope.$parent[rhs];
-	//console.log(serverSideCollection);
-	
-	var remove = $scope.$parent.$watchCollection(rhs, function(serverSideCollection) {
-	  console.log('first call');
+	console.log($element);
+	console.log($scope);
+	//console.log($element);
+	console.log(angular.element($element[0].parentElement).scope());
+	var watchServerSideCollectionOnce = $scope.$watchCollection(vi, function(serverSideCollection) {
 	  console.log(serverSideCollection);
-
-	  // copy, don't want this to be a reference
-	  var serverSideCollection = angular.copy(serverSideCollection);
-          var previousCollection   = angular.copy(serverSideCollection);
-	  console.log(previousCollection);
-	  $scope.$parent.$watchCollection(rhs, function(collection) {
-	    console.log('second');
-
-	    var collectionLength = collection.length;
-	    var previousCollectionLength = previousCollection.length;
-	    // locate existing items
-	    //for (var index = 0; index < collectionLength; index++) {
-	    // key = index;
-            // }
-
-	    // remove leftover items
-
-	    // add new items
-	    // get second to last child
-	    //previousNode = $element.parent()[0];
-	    previousNode = $element[0];
-	    // console.log($element);
-	    // console.log($element[0].children);
-	    // console.log(previousNode);
+	  $scope.$watchCollection(vi, function serverRepeatAction(collection) {
+	    console.log('collection has changed');
 	    console.log(collection);
-	    console.log(previousCollection);
-	    /*
-	    var existingElements = $element[0].parentElement.children;
+            var index, length,
+		previousNode = $element[0],     // node that cloned nodes should be inserted after
+                // initialized to the comment node anchor
+		nextNode,
+		// Same as lastBlockMap but it has the current state. It will become the
+		// lastBlockMap on the next iteration.
+		nextBlockMap = createMap(),
+		collectionLength,
+		key, value, // key/value of iteration
+		trackById,
+		trackByIdFn,
+		collectionKeys,
+		block,       // last object information {scope, element, id}
+		nextBlockOrder,
+		elementsToRemove;
 
-	    for (var i = 0; existingElements.length; i++) {
-	      console.log('see scope');
-	      //console.log(existingElements[i]);
-	    }
-	    */
-	    /*
-	    var existingElements = angular.element($element[0].parentElement.children);
-	    console.log(existingElements);
-	    console.log(existingElements.length);
-	    var deleteElements = [];
-	    var scopeIds = [];
-	    for (var i = 0; i < existingElements.length; i++) {
-	      var localScope = angular.element(existingElements[i].scope());
-	      scopeIds.push(localScope.index);
-	      if (i != localScope.index) {
-		//
-	      }
-	      //if (i != localScope.index) {
+            if (aliasAs) {
+              $scope[aliasAs] = collection;
+            }
+
+            if (isArrayLike(collection)) {
+              collectionKeys = collection;
+              trackByIdFn = trackByIdExpFn || trackByIdArrayFn;
+            } else {
+              trackByIdFn = trackByIdExpFn || trackByIdObjFn;
+              // if object, extract keys, in enumeration order, unsorted
+              collectionKeys = [];
+              for (var itemKey in collection) {
+		if (hasOwnProperty.call(collection, itemKey) && itemKey.charAt(0) !== '$') {
+                  collectionKeys.push(itemKey);
+		}
+              }
+            }
+
+            collectionLength = collectionKeys.length;
+            nextBlockOrder = new Array(collectionLength);
+
+            // locate existing items
+            for (index = 0; index < collectionLength; index++) {
+              key = (collection === collectionKeys) ? index : collectionKeys[index];
+              value = collection[key];
+              trackById = trackByIdFn(key, value, index);
+	      console.log(trackById);
+              if (lastBlockMap[trackById]) {
+		// found previously seen block
+		block = lastBlockMap[trackById];
+		delete lastBlockMap[trackById];
+		nextBlockMap[trackById] = block;
+		nextBlockOrder[index] = block;
 		
-	      // } else {
-
-	      //	      }
-	    }
-	    */
-	    /* works
-	    if (collectionLength < previousCollectionLength) {
-            $animate.leave($element[0].parentElement.children[0]);
-	    }
-	    */
-	    for (index = 0; index < collectionLength; index++) {
-	      console.log('scope');
-              // check for scope, it has the index
-	      // if scope is not
-
-	      // index matches id from scope, means item has not moved
-	      // index has no id in scope, means item has been deleted
-	      // id from scope does not have index, means it has been deleted
-	      
-	      if (index < previousCollectionLength &&
-		  angular.equals(collection[index],previousCollection[index])) {
-		console.log('old');
-	      } else {
-		console.log('new');
-		$transclude(function(clone,scope) {
-		  $animate.enter(clone, null, previousNode);
-		  scope[lhs] = collection[index];
-		  scope['index'] = index;
+              } else if (nextBlockMap[trackById]) {
+		// if collision detected. restore lastBlockMap and throw an error
+		forEach(nextBlockOrder, function(block) {
+                  if (block && block.scope) lastBlockMap[block.id] = block;
 		});
+		throw serverRepeatMinErr('dupes',
+				     "Duplicates in a repeater are not allowed. Use 'track by' expression to specify unique keys. Repeater: {0}, Duplicate key: {1}, Duplicate value: {2}",
+				     expression, trackById, value);
+              } else {
+		// new never before seen block
+		nextBlockOrder[index] = {id: trackById, scope: undefined, clone: undefined};
+		nextBlockMap[trackById] = true;
+              }
+            }
+
+
+	    // ** need to readjust the serverSideCollection size if an item
+	    // from the serverSideCollection gets deleted
+	    
+            // remove leftover items
+            for (var blockKey in lastBlockMap) {
+              block = lastBlockMap[blockKey];
+	      console.log('getBlockNodes');
+              elementsToRemove = getBlockNodes(block.clone);
+              $animate.leave(elementsToRemove);
+              if (elementsToRemove[0].parentNode) {
+		// if the element was not removed yet because of pending animation, mark it as deleted
+		// so that we can ignore it later
+		for (index = 0, length = elementsToRemove.length; index < length; index++) {
+                  elementsToRemove[index][NG_REMOVED] = true;
+		}
+              }
+              block.scope.$destroy();
+            }
+
+            // we are not using forEach for perf reasons (trying to avoid #call)
+            for (index = 0; index < collectionLength; index++) {
+              key = (collection === collectionKeys) ? index : collectionKeys[index];
+              value = collection[key];
+              block = nextBlockOrder[index];
+
+              if (block.scope) {
+		// if we have already seen this object, then we need to reuse the
+		// associated scope/element
+
+		nextNode = previousNode;
+
+		// skip nodes that are already pending removal via leave animation
+		do {
+                  nextNode = nextNode.nextSibling;
+		} while (nextNode && nextNode[NG_REMOVED]);
+
+		if (getBlockStart(block) != nextNode) {
+                  // existing item which got moved
+                  $animate.move(getBlockNodes(block.clone), null, previousNode);
+		}
+		previousNode = getBlockEnd(block);
+		updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
+	      } else {
+		var eScope = angular.element($element[0].parentElement.children[index]).scope();
+		if (eScope && eScope.hasOwnProperty('$$serverSide') && eScope['$$serverSide']) {
+		  // handle items in serverside
+		  block.scope = angular.element($element[0].parentElement.children[index]).scope();
+		  block.clone = angular.element($element[0].parentElement.children[index]);
+		  nextBlockMap[block.id] = block;
+		} else {
+		  $transclude(function serverRepeatTransclude(clone, scope) {
+                    block.scope = scope;
+                    // http://jsperf.com/clone-vs-createcomment
+                    var endNode = serverRepeatEndComment.cloneNode(false);
+		    //var endNode = '';
+                    clone[clone.length++] = endNode;
+                    
+                    $animate.enter(clone, null, previousNode);
+                    previousNode = endNode;
+                    // Note: We only need the first/last node of the cloned nodes.
+                    // However, we need to keep the reference to the jqlite wrapper as it might be changed later
+                    // by a directive with templateUrl when its template arrives.
+                    block.clone = clone;
+                    nextBlockMap[block.id] = block;
+                    updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
+		  });
+		}
 	      }
-	      console.log(angular.element($element[0].parentElement.children[index]).scope());
-	      console.log(angular.element($element[0].parentElement.children[index]).scope()['index']);
-	    }
-	    previousCollection = angular.copy(collection);
-	  });
-	  remove();
+            }
+            lastBlockMap = nextBlockMap;
+          });
+	  watchServerSideCollectionOnce();
 	});
-	/*
-	var second = $scope.$parent.$watchCollection(rhs, function(updatedCollection) {
-	  console.log('second');
-	});
-	*/
-      }
+      };
     }
-  } 
+  };
 });
