@@ -268,15 +268,6 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 		var val = gc[0].innerText;
 		// hashes only right now, not able to distinguish arrays yet
 		// need a way to handle that
-
-		/*
-		var keysLength = keys.length;
-		for (var k = 0; k < keysLength; k++) {
-                  if (k === keysLength - 1) {
-                    newObject[keys[k]] = val;
-		  }
-		}
-		*/
 		
                 var newObjectPointer = newObject;
 		var keysLength = keys.length;
@@ -314,10 +305,11 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	   
 	  }
 	}
+	/*
 	console.log(rhs);
-        
 	console.log('directive scope')
 	console.log($scope);
+	*/
       }, post: angular.noop}
             
     }
@@ -545,6 +537,34 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 		}
 		previousNode = getBlockEnd(block);
 		updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
+	      } else {
+		var eScope = angular.element($element[0].parentElement.children[index]).scope();
+		if (eScope && eScope.hasOwnProperty('$$serverSide') && eScope['$$serverSide']) {
+		  // handle items in serverside
+		  block.scope = angular.element($element[0].parentElement.children[index]).scope();
+		  block.clone = angular.element($element[0].parentElement.children[index]);
+		  nextBlockMap[block.id] = block;
+		} else {
+		  $transclude(function ngRepeatTransclude(clone, scope) {
+                    block.scope = scope;
+                    // http://jsperf.com/clone-vs-createcomment
+                    var endNode = ngRepeatEndComment.cloneNode(false);
+		    //var endNode = '';
+                    clone[clone.length++] = endNode;
+                    
+                    $animate.enter(clone, null, previousNode);
+                    previousNode = endNode;
+                    // Note: We only need the first/last node of the cloned nodes.
+                    // However, we need to keep the reference to the jqlite wrapper as it might be changed later
+                    // by a directive with templateUrl when its template arrives.
+                    block.clone = clone;
+                    nextBlockMap[block.id] = block;
+                    updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
+		  });
+		}
+	      }
+
+	      /*
               } else if (index > serverSideCollectionLength - 1) {
 		// don't animate items that are entered via sever-repeat-item
 		// new item which we don't know about
@@ -566,41 +586,11 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 		});
               } else {
 		// handle items in serverside
-		console.log('server side');
-                  
 		block.scope = angular.element($element[0].parentElement.children[index]).scope();
-   
 		block.clone = angular.element($element[0].parentElement.children[index]);
-                console.log(block);
 		nextBlockMap[block.id] = block;
-
-		/*
-		nextNode = previousNode;
-
-		// skip nodes that are already pending removal via leave animation
-		do {
-                  nextNode = nextNode.nextSibling;
-		} while (nextNode && nextNode[NG_REMOVED]);
-
-		if (getBlockStart(block) != nextNode) {
-                  // existing item which got moved
-                  $animate.move(getBlockNodes(block.clone), null, previousNode);
-		}
-		previousNode = getBlockEnd(block);
-		updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
-		*/
-                /*
-		var endNode = ngRepeatEndComment.cloneNode(false);
-
-		var clone = angular.element($element[0].parentElement.children[index]);
-                clone[clone.length++] = endNode;
-
-		previousNode = endNode;  
-                block.clone = clone;
-		nextBlockMap[block.id] = block;
-		updateScope(block.scope, index, valueIdentifier, value, keyIdentifier, key, collectionLength);
-                */
 	      }
+	      */
             }
             lastBlockMap = nextBlockMap;
           });
