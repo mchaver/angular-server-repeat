@@ -141,6 +141,11 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
   return {
     restrict : 'A',
     priority : 1000,
+    
+    controller: function( $scope, $element, $attrs, $transclude ) {
+      $scope.z = 'z-test';
+      this.test = 'ctrl test';
+    },
     compile: function serverRepeatCompile($element, $attr) {
       var expression = $attr.serverRepeat;
       var serverRepeatMinErr = minErr('serverRepeat');
@@ -176,6 +181,8 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
       
       return {
 	pre : function ($scope,$element,$attr,ctrl,$transclude) {
+	  console.log('ctrl');
+	  console.log(ctrl);
 	  var collection;
 	  var member;
 
@@ -198,9 +205,6 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	      for (var i = 1; i < namesLength - 1; i++) {
 		middleVarNames.push(names[i]);
 	      }
-	      console.log('childName');
-	      console.log(childName);
-	      console.log(middleVarNames);
 	      // point to the correct collection
 	      // parentCollection[childName] = [];
 
@@ -249,6 +253,24 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	  
 	  $scope.$parent.setProperty = function(key, value) {
 	    member[key] = value;
+	    /*
+	    console.log(keys);
+	    
+	    var memberPointer = member[keys[0]];
+	    
+	    if (keys.length > 1) {
+	      member[keys[0]] = {};
+	    for (var i = 1; i < keys.length; i++) {
+	      //if (memberPointer === undefined) {
+	        memberPointer[keys[i]] = {};
+	      //}
+	      //memberPointer[keys[i-1]] = undefined;
+	      memberPointer = memberPointer[keys[i]];
+	    }
+	    }
+	    
+	    memberPointer = value;
+	    */
 	  }
 
 	  $scope.$parent.setProperties = function(properties) {
@@ -256,7 +278,21 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	  }
 
 	  $scope.$parent.popCollection = function() {
-	    $scope.$parent.$$collectionNames.pop();
+	    var lhs = $scope.$parent.$$collectionNames.pop().lhs;
+
+	    /*
+	    for (var i = 0; i < collection.length; i++) {
+	      var newScope = $scope.$new(true);
+	      newScope.$$serverSide = true;
+	      //var lhs = $scope.$parent.$$collectionNames[cnl-1].lhs;
+	      newScope[lhs] = collection[i];
+	      console.log(newScope);
+	      $compile($element.children()[i])(newScope);
+	      //collection[i]
+	      
+	    }
+	    */
+	    
 	    var l = $scope.$parent.$$collectionNames.length;
 	    if (l > 0) {
 	      var names = $scope.$parent.$$collectionNames[l-1];
@@ -264,7 +300,21 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	      member = collection[collection.length-1];
 	    }
 	  }
-	}, post : function ($scope,$element,$attr,ctrl,$transclude) {
+
+	  $scope.$parent.compileServerRepeatItem = function(element) {
+	    var cnl = $scope.$parent.$$collectionNames.length;
+	    var cl  = collection.length;
+
+	    if (cnl > 0 && cl > 0) {
+	      var newScope = $scope.$new(true);
+	      newScope.$$serverSide = true;
+	      var lhs = $scope.$parent.$$collectionNames[cnl-1].lhs;
+	      newScope[lhs] = collection[cl-1];
+	      // slightly strange behavior here
+	      $compile(element.children())(newScope);
+	    }
+	  }
+	}, post : function ($scope,$element,$attr,ctrl,$transclude) {	  
 	  $scope.$parent.popCollection();
 	}
       }	
@@ -273,35 +323,47 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 }).directive('serverRepeatItem',function($compile) {
   return {
     restrict : 'A',
-    priority : 1000,
+    priority : 999,
+    require : '^serverRepeat',
     compile: function serverRepeatCompile($element, $attr) {
       return {
 	pre : function ($scope,$element,$attr,ctrl,$transclude) {
-	  console.log($attr);
+	  console.log('serverRepeatItem');
+	  console.log(ctrl);
 	  $scope.$parent.addMember();
 	  if ($attr.hasOwnProperty('serverRepeatItemData')) {
 	    $scope.$parent.setProperties(angular.fromJson($attr.serverRepeatItemData));
 	  }
 
-	}, post : angular.noop
-
+	}, post : function ($scope,$element,$attr,ctrl,$transclude) {
+	  // already traversed the children elements
+	  // add data to a new scope and bind it to make ng-bind work properly
+	  console.log('server repet');
+	  console.log($element);
+	  $scope.$parent.compileServerRepeatItem($element);
+	}
       }
     }    
   }
 }).directive('serverBind',function($compile) {
   return {
     restrict : 'A',
-    priority : 1000,
+    priority : 998,
+    
     compile: function serverRepeatCompile($element, $attr) {
       return {
 	pre : function ($scope,$element,$attr,ctrl,$transclude) {
-	  //console.log($scope);
 	  var keys = $attr.serverBind.split('.');
-	  var key = keys[keys.length-1];
-	  console.log(keys);
-	  $scope.$parent.setProperty(key,$element.text());
-
-	  console.log($scope.$parent['posts']);
+	  var keysWithoutFirst = keys.slice(1,keys.length);
+	  if (keys.length > 0) {
+	    var key = keys[keys.length-1]
+	    $scope.$parent.setProperty(key,$element.text());
+	    $element.attr('ng-bind', $attr.serverBind);
+	  } else {
+            // throw error
+	  }
+	  //console.log($scope.$parent);
+	  //console.log($scope.$parent['posts']);
 	}, post : angular.noop
 
       }

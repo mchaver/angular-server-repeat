@@ -8,7 +8,7 @@
 	<div server-bind="post.title">My First Day</div>
 	<div server-bind="post.author">James</div>
 	<div server-bind="post.summary">blah blah blah</div>
-	<!-- <div server-bind="post.test.test">testing1</div> -->
+	<div server-bind="post.test.test">testing1</div>
 	
 	<div server-repeat="user in post.x.users">
 	  
@@ -18,12 +18,12 @@
 	  <div server-repeat-item>
 	    <div server-bind="user.name">George</div>
 	  </div>
-	  
+	  <!--
 	  <div server-repeat-item-dynamic>
 	    <div ng-bind="user.name">
 	    </div>
 	  </div>
-	  
+	  -->
 	</div>
         
 	<button ng-click="deleteItem(0)">delete</button>
@@ -54,14 +54,14 @@
 	<div server-bind="post.test.test">testing3</div>
 	<button ng-click="deleteItem(2)">delete</button>
       </div>
-      
+      <!--
       <div server-repeat-item-dynamic>
 	<div ng-bind="post.title"></div>
 	<div ng-bind="post.author"></div>
 	<div ng-bind="post.summary"></div>
 	<button ng-click="deleteItem($index)">delete</button>
       </div>
-      
+      -->
       <!--<div ng-bind="post.title">-->
     </div>
 
@@ -76,13 +76,14 @@
       controller('testController', function($scope) {
 
       $scope.testClick = function() {
-          $scope.posts[0].id = 1;
+      $scope.posts[0].author = "boss";
+          //$scope.posts[0].id = 1;
           //console.log('click');
           //$scope.posts[0].users[0].name = 'The New Guy';       
-          $scope.posts[0].x.users.push({name:'The New Guy'});
-          $scope.posts[1].x.users.push({name:'Other Dude'});
+          //$scope.posts[0].x.users.push({name:'The New Guy'});
+          //$scope.posts[1].x.users.push({name:'Other Dude'});
           //console.log($scope.posts);
-          $scope.posts.push({title:'123',author:'Jade',summary:'Nothing to say'});
+          //$scope.posts.push({title:'123',author:'Jade',summary:'Nothing to say'});
           console.log($scope.posts);
           //console.log($scope);
       
