@@ -173,6 +173,178 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
           aliasAs);
       }
 
+      
+      return {
+	pre : function ($scope,$element,$attr,ctrl,$transclude) {
+	  var collection;
+	  var member;
+
+	  function getCollection(lhs,rhs) {
+	    var collection;
+	    var collectionName = '';
+	    if (rhs.indexOf('.') > -1) {
+	      // possibly has more than one child
+	      var names = rhs.split('.');
+	      var parentAlias = names[0];
+	      var parentName  = $scope.$parent['$$collectionAliases'][parentAlias];
+
+	      var collections = $scope.$parent[parentName];
+	      var parentCollection = collections[collections.length-1];
+              
+	      var namesLength = names.length;
+	      var childAlias = lhs;
+	      var childName = names[namesLength - 1];
+	      var middleVarNames = [];
+	      for (var i = 1; i < namesLength - 1; i++) {
+		middleVarNames.push(names[i]);
+	      }
+	      console.log('childName');
+	      console.log(childName);
+	      console.log(middleVarNames);
+	      // point to the correct collection
+	      // parentCollection[childName] = [];
+
+	      collection = parentCollection;
+	      for (var i = 0; i < middleVarNames.length; i++) {
+		// set value as {}
+		collection[middleVarNames[i]] = {};
+		collection = collection[middleVarNames[i]];
+	      }
+	      collection[childName] = [];
+	      collection = collection[childName];
+	      
+	      collectionName = parentName + '[' + String(collections.length-1) + '].' + names.join('.');
+
+	    } else if ($scope.$parent[rhs]) {
+              
+	      collection = $scope.$parent[rhs];
+	      collectionName = rhs; // + '[' + String($scope.$parent[rhs].length) + ']';
+	    } else {
+	      if (!$scope.$parent.hasOwnProperty('$$collectionAliases')) {
+		$scope.$parent['$$collectionAliases'] = {};
+	      }
+	      $scope.$parent['$$collectionAliases'][lhs] = rhs;
+	      $scope.$parent[rhs] = [];
+	      collection = $scope.$parent[rhs];
+	      collectionName = rhs;
+	    }
+	    return collection;
+	    //return {collection:collection,collectionName:collectionName};
+	  }
+
+	  collection = getCollection(lhs,rhs);
+
+	  if ($scope.$parent.hasOwnProperty('$$collectionNames')) {
+	    $scope.$parent.$$collectionNames.push({lhs:lhs,rhs:rhs});
+	  } else {
+	    $scope.$parent.$$collectionNames = [{lhs:lhs,rhs:rhs}];
+	  }
+
+	  // properties are added as everything is compiled
+	  // dependent on compile order
+	  $scope.$parent.addMember = function() {
+	    collection.push({});
+	    member = collection[collection.length-1];
+	  }
+	  
+	  $scope.$parent.setProperty = function(key, value) {
+	    member[key] = value;
+	  }
+
+	  $scope.$parent.setProperties = function(properties) {
+	    angular.extend(member, properties);
+	  }
+
+	  $scope.$parent.popCollection = function() {
+	    $scope.$parent.$$collectionNames.pop();
+	    var l = $scope.$parent.$$collectionNames.length;
+	    if (l > 0) {
+	      var names = $scope.$parent.$$collectionNames[l-1];
+	      collection = getCollection(names.lhs,names.rhs);
+	      member = collection[collection.length-1];
+	    }
+	  }
+	}, post : function ($scope,$element,$attr,ctrl,$transclude) {
+	  $scope.$parent.popCollection();
+	}
+      }	
+    }
+  }
+}).directive('serverRepeatItem',function($compile) {
+  return {
+    restrict : 'A',
+    priority : 1000,
+    compile: function serverRepeatCompile($element, $attr) {
+      return {
+	pre : function ($scope,$element,$attr,ctrl,$transclude) {
+	  console.log($attr);
+	  $scope.$parent.addMember();
+	  if ($attr.hasOwnProperty('serverRepeatItemData')) {
+	    $scope.$parent.setProperties(angular.fromJson($attr.serverRepeatItemData));
+	  }
+
+	}, post : angular.noop
+
+      }
+    }    
+  }
+}).directive('serverBind',function($compile) {
+  return {
+    restrict : 'A',
+    priority : 1000,
+    compile: function serverRepeatCompile($element, $attr) {
+      return {
+	pre : function ($scope,$element,$attr,ctrl,$transclude) {
+	  //console.log($scope);
+	  var keys = $attr.serverBind.split('.');
+	  var key = keys[keys.length-1];
+	  console.log(keys);
+	  $scope.$parent.setProperty(key,$element.text());
+
+	  console.log($scope.$parent['posts']);
+	}, post : angular.noop
+
+      }
+    }    
+  }
+})
+/*
+angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($animate, $compile, $parse) {
+  return {
+    restrict : 'A',
+    priority : 1000,
+    compile: function serverRepeatCompile($element, $attr) {
+      var expression = $attr.serverRepeat;
+      var serverRepeatMinErr = minErr('serverRepeat');
+
+      var match = expression.match(/^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+track\s+by\s+([\s\S]+?))?\s*$/);
+
+      if (!match) {
+        throw serverRepeatMinErr('iexp', "Expected expression in form of '_item_ in _collection_[ track by _id_]' but got '{0}'.",
+            expression);
+      }
+
+      var lhs = match[1];
+      var rhs = match[2];
+      var aliasAs = match[3];
+      var trackByExp = match[4];
+
+      match = lhs.match(/^(?:(\s*[\$\w]+)|\(\s*([\$\w]+)\s*,\s*([\$\w]+)\s*\))$/);
+
+      if (!match) {
+        throw serverRepeatMinErr('iidexp', "'_item_' in '_item_ in _collection_' should be an identifier or '(_key_, _value_)' expression, but got '{0}'.",
+            lhs);
+      }
+
+      var valueIdentifier = match[3] || match[1];
+      var keyIdentifier = match[2];
+
+      if (aliasAs && (!/^[$a-zA-Z_][$a-zA-Z0-9_]*$/.test(aliasAs) ||
+          /^(null|undefined|this|\$index|\$first|\$middle|\$last|\$even|\$odd|\$parent|\$root|\$id)$/.test(aliasAs))) {
+        throw serverRepeatMinErr('badident', "alias '{0}' is invalid --- must be a valid JS identifier which is not a reserved name.",
+          aliasAs);
+      }
+
       // replace lhs with valueIdentifer
 
       // pre should require parent functions to be compiled first
@@ -560,3 +732,4 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
     }
   };
 });
+*/
