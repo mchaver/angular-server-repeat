@@ -4,7 +4,7 @@
 
     <div>Test</div>
     <div server-repeat="post in posts track by $index">
-      <div server-repeat-item>
+      <div server-repeat-item server-repeat-item-data='{"id":0}'>
 	<div server-bind="post.title">My First Day</div>
 	<div server-bind="post.author">James</div>
 	<div server-bind="post.summary">blah blah blah</div>
@@ -71,15 +71,17 @@
       angular.module('ServerRepeatExample', ['ServerRepeat']).
       controller('testController', function($scope) {
 
-        $scope.testClick = function() {
+      $scope.testClick = function() {
+          $scope.posts[0].id = 1;
           //console.log('click');
           //$scope.posts[0].users[0].name = 'The New Guy';       
           $scope.posts[0].x.users.push({name:'The New Guy'});
           $scope.posts[1].x.users.push({name:'Other Dude'});
-          console.log($scope.posts);
-          //$scope.posts.push({title:'123',author:'Jade',summary:'Nothing to say'});
           //console.log($scope.posts);
+          $scope.posts.push({title:'123',author:'Jade',summary:'Nothing to say'});
+          console.log($scope.posts);
           //console.log($scope);
+      
         }
 
         $scope.deleteItem = function(index) {

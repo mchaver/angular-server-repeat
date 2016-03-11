@@ -242,6 +242,12 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	  if (c[0].attributes.hasOwnProperty('server-repeat-item')) {
 	    var newObject = {};
 
+	    if (c[0].attributes.hasOwnProperty('server-repeat-item-data')) {
+	      //  ngServerRepeatCtrl.setProperties(angular.fromJson(attrs.serverBind));
+	      console.log(c[0].attributes['server-repeat-item-data']);
+	      newObject = angular.fromJson(c[0].attributes['server-repeat-item-data'].value);
+	    }
+
 	    for (var j = 0; j < c[0].children.length; j++) {
               var gc = angular.element(c[0].children[j]);
 	      if (gc[0].attributes.hasOwnProperty('server-bind')) {
@@ -286,6 +292,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 
 	    $compile($element.children()[i])(newScope);
 	  }
+	  //$compile($
 	}
 
 	// check for server-repeat-item-dynamic at the same level
@@ -409,10 +416,8 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	}
 
 	var watchServerSideCollectionOnce = $scope.$watchCollection(vi, function(serverSideCollection) {
-	  console.log(serverSideCollection);
 	  $scope.$watchCollection(vi, function serverRepeatAction(collection) {
-	    console.log('collection has changed');
-	    console.log(collection);
+
             var index, length,
 		previousNode = $element[0],     // node that cloned nodes should be inserted after
                 // initialized to the comment node anchor
@@ -455,7 +460,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
               key = (collection === collectionKeys) ? index : collectionKeys[index];
               value = collection[key];
               trackById = trackByIdFn(key, value, index);
-	      console.log(trackById);
+
               if (lastBlockMap[trackById]) {
 		// found previously seen block
 		block = lastBlockMap[trackById];
@@ -482,7 +487,7 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
             // remove leftover items
             for (var blockKey in lastBlockMap) {
               block = lastBlockMap[blockKey];
-	      console.log('getBlockNodes');
+
               elementsToRemove = getBlockNodes(block.clone);
               $animate.leave(elementsToRemove);
               if (elementsToRemove[0].parentNode) {
