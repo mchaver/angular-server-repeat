@@ -447,32 +447,37 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
         var collection     = cs.collection;
 	var collectionName = cs.collectionName;
 
-	console.log('element:');
-	console.log($element);
-	var items = Array.prototype.slice.call($element.children());
-	console.log(items);
+
+	var es = $element.children();
+	var items = [];
+
+	for (var i = 0; i < es.length; i++) {
+	  items.push(es[i]);
+	}
+
+
 	var i = 0;
 	while (items.length > 0) {
 	  var c = angular.element(items.shift());
 	  console.log(c);
-	//for (var i = 0; i < $element.children().length; i++) {
-	//for (var i = 0; i < $element.childNodes().length; i++) {
-	  //var c = angular.element($element.children()[i]);
-	  //var c = angular.element($elemenet.childNodes()[i]);
+
 	  if (c[0].attributes.hasOwnProperty('server-repeat-item')) {
 	    var newObject = {};
 
 	    if (c[0].attributes.hasOwnProperty('server-repeat-item-data')) {
-	      //  ngServerRepeatCtrl.setProperties(angular.fromJson(attrs.serverBind));
-	      console.log(c[0].attributes['server-repeat-item-data']);
+
 	      newObject = angular.fromJson(c[0].attributes['server-repeat-item-data'].value);
 	    }
 
 
-	    var gcs = Array.prototype.slice.call(angular.element(c[0].children));
+	    var es = angular.element(c[0].children);
+	    var gcs = [];
+	    for (var k = 0; k < es.length; k++) {
+	      gcs.push(es[k]);
+	    }
+	   
 	    while (gcs.length > 0) {
-	    //for (var j = 0; j < c[0].children.length; j++) {
-              //var gc = angular.element(c[0].children[j]);
+
 	      var gc = angular.element(gcs.shift());
 	      if (gc[0].attributes.hasOwnProperty('server-bind')) {
 		// top level server-bind
@@ -507,7 +512,10 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	      } else {
 		if (!gc[0].attributes.hasOwnProperty('server-repeat') &&
 		    !gc[0].attributes.hasOwnProperty('server-repeat-item')) {
-		  gcs.concat(Array.prototype.slice.call(angular.element(gc[0].children)));
+		  var es = angular.element(gc[0].children);
+		  for (var z = 0; z < es.length; z++) {
+		    gcs.push(es[z]);
+		  }
 		}
 	      }
 	    }
@@ -521,10 +529,15 @@ angular.module('ServerRepeat',['ngAnimate']).directive('serverRepeat',function($
 	    newScope[lhs] = newObject;
 
 	    $compile($element.children()[i])(newScope);
+
 	  } else {
 	    if (!c[0].attributes.hasOwnProperty('server-repeat') &&
 		!c[0].attributes.hasOwnProperty('server-bind')) {
-	      items.concat(Array.prototype.slice.call(angular.element(c[0].children)));
+	      var es = angular.element(gc[0].children);
+	      for (var z = 0; z < es.length; z++) {
+		items.push(es[z]);
+	      }
+	      
 	    }
 	  }
 	  i++;
