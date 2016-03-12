@@ -8,8 +8,15 @@
 	<div server-bind="post.title">My First Day</div>
 	<div server-bind="post.author">James</div>
 	<div server-bind="post.summary">blah blah blah</div>
+	<div server-repeat="user in post.x.users">
+	  <div server-repeat-item>
+	    <div server-bind="user.name">Bob</div>
+	  </div>
+	</div>
+	<!--
 	<div server-bind="post.test.test">testing1</div>
-	
+	-->
+	 <!--
 	<div server-repeat="user in post.x.users">
 	  
 	  <div server-repeat-item>
@@ -18,14 +25,14 @@
 	  <div server-repeat-item>
 	    <div server-bind="user.name">George</div>
 	  </div>
-	  <!--
+	
 	  <div server-repeat-item-dynamic>
 	    <div ng-bind="user.name">
 	    </div>
 	  </div>
-	  -->
+	
 	</div>
-        
+          -->
 	<button ng-click="deleteItem(0)">delete</button>
       </div>
       <div server-repeat-item>
@@ -33,6 +40,12 @@
 	<div server-bind="post.author">Johnny</div>
 	<div server-bind="post.summary">blah blah</div>
 	<div server-bind="post.test.test">testing2</div>
+	<div server-repeat="user in post.x.users">
+	  <div server-repeat-item>
+	    <div server-bind="user.name">Tommy</div>
+	  </div>
+	</div>
+
 	<!--
 	<div server-repeat="user in post.x.users">
 	  <div server-repeat-item>
@@ -76,7 +89,10 @@
       controller('testController', function($scope) {
 
       $scope.testClick = function() {
-      $scope.posts[0].author = "boss";
+      console.log($scope.posts);
+      $scope.posts[0].x.users[0].name = "adsfsadf";
+//      $scope.posts[0].author = "boss";
+      //$scope.posts[0].x.users[0].name = "The New Guy";
           //$scope.posts[0].id = 1;
           //console.log('click');
           //$scope.posts[0].users[0].name = 'The New Guy';       
