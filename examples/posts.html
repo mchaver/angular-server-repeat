@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+  <body ng-app="ServerRepeatExample" ng-controller="testController">
+    <h1>Number of Posts: <span ng-bind="posts.length"></span></h1>
+    <!-- cannot use $index at the moment, you can pass the object or give each object a unique id -->
+    <div style="margin:0px 0px 0px 10px" server-repeat="post in posts">
+      <div server-repeat-item server-repeat-item-data='{"id":0}'>
+        <div>
+        <h3>
+          <span server-bind="post.title">Programming with Angular</span>
+          <span>by</span>
+          <span server-bind="post.author">Jaime</span>
+          <button ng-click="editPost(0)">Edit Post</button>
+          <button ng-click="deletePost(0)">Delete Post</button>
+        </h3>
+        <div style="margin:0px 0px 0px 10px" server-bind="post.content">Last night I designed an interesting program with Angular.</div>
+        </div>
+      </div>
+
+      <div server-repeat-item server-repeat-item-data='{"id":1}'>
+        <h3>
+          <span server-bind="post.title">Tomorrow</span>
+          <span>by</span>
+          <span server-bind="post.author">Jordi</span>
+          <button ng-click="editPost(1)">Edit Post</button>
+          <button ng-click="deletePost(1)">Delete Post</button>
+        </h3>
+        <div style="margin:0px 0px 0px 10px" server-bind="post.content">I'm not sure what is going to happen tomorrow.</div>
+      </div>
+      
+      <div server-repeat-item server-repeat-item-data='{"id":2}'>
+        <h3>
+          <span server-bind="post.title">Tennis Championship</span>
+          <span>by</span>
+          <span server-bind="post.author">Justina</span>
+          <button ng-click="editPost(2)">Edit Post</button>
+          <button ng-click="deletePost(2)">Delete Post</button>
+        </h3>
+        <div style="margin:0px 0px 0px 10px" server-bind="post.content">Today the coach told us we are going to compete in a championship next month.</div>
+      </div>
+
+      <div server-repeat-item-dynamic>
+        <h3>
+          <span ng-bind="post.title"></span>
+          <span>by</span>
+          <span ng-bind="post.author"></span>
+          <button ng-click="editPost(post.id)">Edit Post</button>
+          <button ng-click="deletePost(post.id)">Delete Post</button>
+        </h3>
+        <div style="margin:0px 0px 0px 10px" ng-bind="post.content"></div>
+      </div>    
+    </div>
+
+    <div style="margin:50px 0px 0px 25px" ng-show="editPost">
+      <div ng-show="showEditPost">
+        <h4>Edit Post</h4>
+        <div>
+          <label for="postTitle">Title</label>
+          <input type="text" id="postTitle" placeholder="Post Title" ng-model="editPostObject.title">
+        </div>
+        <div>
+          <label for="postAuthor">Author</label>
+          <input type="text" id="postAuthor" placeholder="Author's name" ng-model="editPostObject.author">
+        </div>
+        <div>
+          <label for="postContent">Content</label>
+          <textarea type="text" id="postContent"  placeholder="Content" rows="4" cols="50" ng-model="editPostObject.content"></textarea>
+        </div>
+
+        <button ng-click="saveEditPost()">Save Post</button>
+        <button ng-click="cancelEditPost()">Cancel</button>
+      </div>
+    </div>
+
+    <div style="margin:50px 0px 0px 25px">
+      <button ng-click="createNewPost()" ng-hide="showNewPost">New Post</button>
+      <div ng-show="showNewPost">
+        <h4>Create New Post</h4>
+        <div>
+          <label for="postTitle">Title</label>
+          <input type="text" id="postTitle" placeholder="Post Title" ng-model="newPostTitle">
+        </div>
+        <div>
+          <label for="postAuthor">Author</label>
+          <input type="text" id="postAuthor" placeholder="Author's name" ng-model="newPostAuthor">
+        </div>
+        <div>
+          <label for="postContent">Content</label>
+          <textarea type="text" id="postContent"  placeholder="Content" rows="4" cols="50" ng-model="newPostContent"></textarea>
+        </div>
+
+        <button ng-click="saveNewPost()">Save Post</button>
+        <button ng-click="cancelNewPost()">Cancel</button>
+      </div>
+    </div>
+    
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/angularjs/1.3.9/angular.min.js"></script>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/angularjs/1.3.9/angular-animate.js"></script>
+    <script type="text/javascript" src="../src/angular-server-repeat.js"></script>
+    <script type="text/javascript">
+      angular.module('ServerRepeatExample', ['ServerRepeat']).
+        controller('testController', function($scope) {
+
+          // edit existing post
+          $scope.showEditPost = false;
+          $scope.editPostObject = null;
+          $scope.editPostId = null;
+          $scope.postBackup = null;
+          $scope.editPost = function(id) {
+            $scope.showEditPost = true;
+            for (var i = 0; i < $scope.posts.length; i++) {
+              if (id === $scope.posts[i].id) {
+                $scope.editPostObject = $scope.posts[i];
+                $scope.editPostId = id;
+                $scope.postBackup = angular.copy($scope.posts[i]);
+                break;
+              }
+            }
+          }
+
+          $scope.saveEditPost = function() {
+            $scope.showEditPost = false;
+            $scope.editPostObject = null;
+          }
+
+          $scope.cancelEditPost = function () {
+            for (var i = 0; i < $scope.posts.length; i++) {
+              if ($scope.editPostId === $scope.posts[i].id) {
+                $scope.posts[i] = angular.copy($scope.postBackup);
+              }
+            }
+            $scope.showEditPost = false;
+          }
+
+          // delete post
+          $scope.deletePost = function(id) {
+            for (var i = 0; i < $scope.posts.length; i++) {
+              if (id === $scope.posts[i].id) {
+                $scope.posts.splice(i,1);
+                break;  
+              }
+            }
+          }
+
+
+          // create/save new post
+
+          $scope.saveNewPost = function() {
+            var payload =  {
+              id      : getNewPostId()
+            , title   : $scope.newPostTitle
+            , author  : $scope.newPostAuthor
+            , content : $scope.newPostContent
+            }
+
+            $scope.posts.push(payload);
+            clearForm();
+          };
+
+          $scope.cancelNewPost = function() {
+            $scope.showNewPost = false;
+            clearForm();
+          }
+
+          $scope.showNewPost = false;
+          $scope.createNewPost = function() {
+            $scope.showNewPost = true;
+          }
+
+
+          function clearForm() {
+            $scope.newPostTitle = '';
+            $scope.newPostAuthor = '';
+            $scope.newPostContent = '';
+          }
+
+          function getNewPostId() {
+            var highest = 0;
+            for (var i = 0; i < $scope.posts.length; i++) {
+              if (highest <= $scope.posts[i].id) {
+                highest = $scope.posts[i].id + 1
+              }
+            }
+            return highest;
+          }
+
+        });
+    </script>
+  </body>
+</html>
